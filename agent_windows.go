@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"reflect"
@@ -145,6 +146,24 @@ func (p *PageantWin) WaitMessage() {
 	}
 }
 
+type readWriter struct {
+	io.Reader
+	io.Writer
+}
+
+func NewReadWriter(r io.Reader, w io.Writer) io.ReadWriter {
+	return &readWriter{r, w}
+}
+
+func getMemoryBytes(addr uintptr, sz int) (m memoryMap) {
+	m = memoryMap{}
+	dh := m.header()
+	dh.Data = addr
+	dh.Len = sz
+	dh.Cap = dh.Len
+	return
+}
+
 func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 	if cdata.dwData != AGENT_COPYDATA_ID {
 		return //not a putty message
@@ -152,11 +171,7 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 
 	log.Println("Received a PUTTY message")
 
-	m := memoryMap{}
-	dh := m.header()
-	dh.Data = cdata.lpData
-	dh.Len = int(cdata.cbData - 1) //remove \0
-	dh.Cap = dh.Len
+	m := getMemoryBytes(cdata.lpData, int(cdata.cbData-1)) //remove \0
 
 	var mapname string = string(m[:cdata.cbData-1])
 
@@ -169,6 +184,7 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 		log.Println("Failed to OpenFileMapping")
 		return
 	}
+	defer syscall.CloseHandle(h)
 
 	addr, errno := syscall.MapViewOfFile(h, uint32(syscall.FILE_MAP_WRITE), 0, 0, 0)
 	if addr == 0 {
@@ -176,26 +192,38 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 		return
 	}
 
-	m = memoryMap{}
-	dh = m.header()
-	dh.Data = addr
-	dh.Len = 4
-	dh.Cap = dh.Len
+	//read message size
+	m = getMemoryBytes(addr, 4)
 
-	log.Println("m:", m)
-
-	var len int32
+	//decode BigEndian size
+	var ln int32
 	buf := bytes.NewBuffer(m)
-	binary.Read(buf, binary.BigEndian, &len)
+	binary.Read(buf, binary.BigEndian, &ln)
 
-	m = memoryMap{}
-	dh = m.header()
-	dh.Data = addr + 4
-	dh.Len = int(len)
-	dh.Cap = dh.Len
+	//Read ssh-agent message based on ln
+	m = getMemoryBytes(addr, int(ln)+4)
 
-	log.Println("addr:", addr, " length:", len)
+	log.Println("addr:", addr, " length:", ln)
 	log.Println(m)
 
-	syscall.CloseHandle(h)
+	var out bytes.Buffer
+	rw := NewReadWriter(bytes.NewBuffer(m), &out)
+
+	a := NewSshAgent()
+	if err := a.ProcessRequest(rw); err != nil {
+		fmt.Println("Failed:", err)
+		return
+	}
+
+	log.Println(out)
+
+	m = getMemoryBytes(addr, out.Len())
+
+	log.Printf("Writing %v bytes to memory\n", out.Len())
+
+	//Copy bytes to shared memory
+	outbytes := out.Bytes()
+	for i := 0; i < out.Len(); i++ {
+		m[i] = outbytes[i]
+	}
 }
