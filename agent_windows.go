@@ -19,6 +19,8 @@ import (
 var (
 	modkernel32         = syscall.NewLazyDLL("kernel32.dll")
 	procOpenFileMapping = modkernel32.NewProc("OpenFileMappingW")
+
+	sshAgent *SshAgent
 )
 
 const (
@@ -67,6 +69,8 @@ func RunAgent() {
 		log.Println("Can't create pageant window:", err)
 		return
 	}
+
+	sshAgent = NewSshAgent()
 
 	p.WaitMessage()
 }
@@ -204,18 +208,14 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 	m = getMemoryBytes(addr, int(ln)+4)
 
 	log.Println("addr:", addr, " length:", ln)
-	log.Println(m)
 
 	var out bytes.Buffer
 	rw := NewReadWriter(bytes.NewBuffer(m), &out)
 
-	a := NewSshAgent()
-	if err := a.ProcessRequest(rw); err != nil {
+	if err := sshAgent.ProcessRequest(rw); err != nil {
 		fmt.Println("Failed:", err)
 		return
 	}
-
-	log.Println(out)
 
 	m = getMemoryBytes(addr, out.Len())
 

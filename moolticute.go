@@ -122,12 +122,93 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 		return
 	}
 
+	//To debug
+	//	kf, _ := os.Create("keys.bin")
+	//	kf.Write(bdec)
+	//	kf.Close()
+
 	buffer := bytes.NewBuffer(bdec)
 	binDec := gob.NewDecoder(buffer)
 	err = binDec.Decode(keys)
 	if err != nil {
 		log.Println("Failed to decode encoding/gob:", err)
 		return
+	}
+
+	return
+}
+
+func McSetKeys(keys *McBinKeys) (err error) {
+	u := url.URL{Scheme: "ws", Host: MOOLTICUTE_DAEMON_URL, Path: "/"}
+	log.Printf("Moolticute: connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Print("Moolticute: dial:", err)
+		return
+	}
+	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	defer c.Close()
+
+	var buffer bytes.Buffer
+	binEnc := gob.NewEncoder(&buffer)
+	if err = binEnc.Encode(keys); err != nil {
+		return fmt.Errorf("Failed to encode with encoding/gob: %v", err)
+	}
+
+	m := MoolticuteMsg{
+		Msg:      "set_data_node",
+		ClientId: uuid.NewV4().String(),
+		Data: MsgData{
+			Service:  "Moolticute SSH Keys",
+			NodeData: base64.StdEncoding.EncodeToString(buffer.Bytes()),
+		},
+	}
+
+	data, err := json.Marshal(m)
+	if err != nil {
+		return
+	}
+	if err = c.WriteMessage(websocket.TextMessage, data); err != nil {
+		log.Println("Moolticute: write:", err)
+		return
+	}
+
+	for {
+		_, data, err = c.ReadMessage()
+		if err != nil {
+			return fmt.Errorf("Moolticute: read: %v", err)
+		}
+
+		log.Println(string(data))
+
+		var recv MoolticuteMsgRaw
+		err = json.Unmarshal(data, &recv)
+		if err != nil {
+			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
+		}
+
+		if recv.Msg != "set_data_node" {
+			continue
+		}
+
+		var recvData MsgData
+		err = json.Unmarshal([]byte(*recv.Data), &recvData)
+		if err != nil {
+			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
+		}
+
+		// keys are not present, this is not an error
+		if recvData.Failed {
+			return fmt.Errorf("Error getting node data from moolticute: %v", err)
+		}
+
+		if m.ClientId == recv.ClientId {
+			break
+		}
+
+		log.Println("Should not get here, something is wrong with moolticute answer")
+		return fmt.Errorf("Something went wrong in Moolticute answer")
 	}
 
 	return
