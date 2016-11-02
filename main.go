@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/fatih/color"
 	"github.com/jawher/mow.cli"
 )
 
@@ -24,13 +23,6 @@ const (
 var (
 	timeoutClearKeys Duration = Duration(time.Minute * 15)
 	mcUrl            *string
-
-	blue       = color.New(color.FgBlue).SprintFunc()
-	errorRed   = color.New(color.FgRed).SprintFunc()
-	errorBgRed = color.New(color.BgRed, color.FgBlack).SprintFunc()
-	green      = color.New(color.FgGreen).SprintFunc()
-	cyan       = color.New(color.FgCyan).SprintFunc()
-	bgCyan     = color.New(color.FgWhite).SprintFunc()
 )
 
 // Declare Duration type for CLI
@@ -52,22 +44,23 @@ func (d *Duration) String() string {
 }
 
 func exit(err error, exit int) {
-	fmt.Fprintln(os.Stderr, errorRed(CharAbort), err)
+	fmt.Fprintln(os.Stderr, CharAbort, err)
 	cli.Exit(exit)
 }
 
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	app := cli.App("moolticute-ssh-agent", "SSH agent that use moolticute to store/load your keys")
+	app := cli.App("moolticute_ssh-agent", "SSH agent that use moolticute to store/load your keys")
 
 	app.Spec = "[-d][-m]"
 
 	app.VarOpt("d duration", &timeoutClearKeys, "How long you want the agent to keep keys into memory (default to 15min)")
 	mcUrl = app.StringOpt("m moolticute_url", MOOLTICUTE_DAEMON_URL, "Use a different url for connecting to moolticute")
 
+	SetupPlatformOpts(app)
+
 	app.Action = func() {
-		color.Blue(CharArrow + " Starting moolticute SSH agent")
 		RunAgent()
 	}
 

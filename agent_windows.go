@@ -1,5 +1,8 @@
 // +build windows
 
+//Agent platform code for windows
+//Emulates Putty Paegant protocol using a window message queue + shared memory
+
 package main
 
 import (
@@ -13,6 +16,7 @@ import (
 	"syscall"
 	"unsafe"
 
+	"github.com/jawher/mow.cli"
 	"github.com/lxn/win"
 )
 
@@ -226,4 +230,8 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 	for i := 0; i < out.Len(); i++ {
 		m[i] = outbytes[i]
 	}
+}
+
+func SetupPlatformOpts(app *cli.Cli) {
+	//Nothing more on windows
 }

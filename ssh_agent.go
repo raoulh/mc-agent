@@ -1,5 +1,9 @@
 package main
 
+//SSH agent
+//Most code comes from golang: golang.org/x/crypto/ssh/agent
+//Modified to fit moolticute usage
+
 import (
 	"encoding/binary"
 	"fmt"

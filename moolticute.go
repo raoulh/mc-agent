@@ -1,5 +1,7 @@
 package main
 
+//Moolticute websocket connection
+
 import (
 	"bytes"
 	"encoding/base64"
