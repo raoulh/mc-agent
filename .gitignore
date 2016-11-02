@@ -22,3 +22,4 @@ _testmain.go
 *.exe
 *.test
 *.prof
+moolticute_ssh-agent
