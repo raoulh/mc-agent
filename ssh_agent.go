@@ -266,9 +266,9 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 		if !a.timerClear.Stop() {
 			<-a.timerClear.C //drain value from the channel
 		}
-		a.timerClear.Reset(time.Second * 10)
+		a.timerClear.Reset(time.Duration(timeoutClearKeys))
 	} else {
-		a.timerClear = time.NewTimer(time.Second * 10)
+		a.timerClear = time.NewTimer(time.Duration(timeoutClearKeys))
 	}
 	go func() {
 		<-a.timerClear.C

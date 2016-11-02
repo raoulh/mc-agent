@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	MOOLTICUTE_DAEMON_URL = "localhost:30035"
+	MOOLTICUTE_DAEMON_URL = "ws://localhost:30035"
 )
 
 type MsgData struct {
@@ -42,7 +42,12 @@ type McBinKeys [][]byte
 
 func McLoadKeys() (keys *McBinKeys, err error) {
 	keys = new(McBinKeys)
-	u := url.URL{Scheme: "ws", Host: MOOLTICUTE_DAEMON_URL, Path: "/"}
+
+	u, err := url.Parse(*mcUrl)
+	if err != nil {
+		log.Println("Unable to parse moolticute URL", *mcUrl)
+		return
+	}
 	log.Printf("Moolticute: connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
