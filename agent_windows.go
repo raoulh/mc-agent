@@ -217,7 +217,7 @@ func handleWmCopyMessage(cdata *COPYDATASTRUCT) {
 	rw := NewReadWriter(bytes.NewBuffer(m), &out)
 
 	if err := sshAgent.ProcessRequest(rw); err != nil {
-		fmt.Println("Failed:", err)
+		log.Println("Failed:", err)
 		return
 	}
 
