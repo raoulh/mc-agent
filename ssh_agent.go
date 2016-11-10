@@ -255,11 +255,12 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 		log.Println("Ask MC keys")
 		k, err := McLoadKeys()
 		if err == nil {
-			a.keysLoaded = true
-
 			if err = a.addKeysToKeychain(k); err != nil {
 				return fmt.Errorf("Failed to load keys from Moolticute: %v", err)
 			} else {
+				if len(*k) > 0 { //only set keys loaded if keys are present
+					a.keysLoaded = true
+				}
 				log.Println(len(*k), "keys loaded from MP")
 			}
 		}
