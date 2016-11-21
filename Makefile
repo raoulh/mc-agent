@@ -3,7 +3,7 @@ APPNAME = moolticute_ssh-agent
 
 TAGS = ""
 BUILD_FLAGS = "-v"
-LDFLAGS = "-H windowsgui" #this prevents opening of console on windows
+#LDFLAGS = "-H windowsgui" #this prevents opening of console on windows
 
 .PHONY: build clean
 

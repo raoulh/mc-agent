@@ -88,8 +88,11 @@ func RunAgent() {
 }
 
 func handleClient(fd net.Conn) {
-	if err := sshAgent.ProcessRequest(fd); err != nil {
-		log.Println("Failed:", err)
+	for {
+		if err := sshAgent.ProcessRequest(fd); err != nil {
+			log.Println("Failed:", err)
+			break
+		}
 	}
 }
 
