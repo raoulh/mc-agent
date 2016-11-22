@@ -92,6 +92,13 @@ type agentRemoveIdentityMsg struct {
 	KeyBlob []byte `sshtype:"18"`
 }
 
+// See [PROTOCOL.agent], section 2.5.1.
+const agentV1IdentitiesAnswer = 2
+
+type agentV1IdentityMsg struct {
+	Numkeys uint32 `sshtype:"2"`
+}
+
 //struct for maintaining moolticute keys
 type McKey struct {
 	keyBlob  []byte
@@ -146,6 +153,13 @@ func marshalKey(k *agent.Key) []byte {
 
 func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 	switch data[0] {
+
+	case agentRequestV1Identities:
+		return &agentV1IdentityMsg{0}, nil
+
+	case agentRemoveAllV1Identities:
+		return nil, nil
+
 	case agentSignRequest:
 		log.Println("Signing request")
 		var req signRequestAgentMsg
