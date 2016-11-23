@@ -245,9 +245,6 @@ func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 //process a SSH agent request
 func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 
-	a.lock.Lock()
-	defer a.lock.Unlock()
-
 	var length [4]byte
 
 	if _, err := io.ReadFull(c, length[:]); err != nil {
@@ -263,6 +260,9 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 	if _, err := io.ReadFull(c, req); err != nil {
 		return err
 	}
+
+	a.lock.Lock()
+	defer a.lock.Unlock()
 
 	//load keys from moolticute if not done, or after timeout
 	if !a.keysLoaded {
