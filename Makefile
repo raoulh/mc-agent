@@ -15,7 +15,10 @@ build: $(GENERATED)
 	go install $(BUILD_FLAGS) -ldflags '$(LDFLAGS)' -tags '$(TAGS)'
 	cp '$(GOPATH)/bin/$(APPNAME)' .
 
+windows: $(GENERATED)
+	go install $(BUILD_FLAGS) -ldflags '$(LDFLAGS) -H windowsgui' -tags '$(TAGS)'
+	cp '$(GOPATH)/bin/$(APPNAME)' .
+
 clean:
 	go clean -i ./...
-
 
