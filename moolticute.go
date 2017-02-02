@@ -146,7 +146,11 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 }
 
 func McSetKeys(keys *McBinKeys) (err error) {
-	u := url.URL{Scheme: "ws", Host: MOOLTICUTE_DAEMON_URL, Path: "/"}
+	u, err := url.Parse(*mcUrl)
+	if err != nil {
+		log.Println("Unable to parse moolticute URL", *mcUrl)
+		return
+	}
 	log.Printf("Moolticute: connecting to %s", u.String())
 
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
