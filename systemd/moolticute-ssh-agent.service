@@ -1,10 +1,11 @@
 [Unit]
 Description=Moolticute SSH key agent
+Requires=moolticuted.service
 
 [Service]
 Type=simple
-Environment=SSH_AUTH_SOCK=%t/moolticute-ssh-agent.socket
-ExecStart=/usr/bin/moolticute_ssh-agent --address=$SSH_AUTH_SOCK --no-fork
+Environment="SSH_AUTH_SOCK=%t/moolticute-ssh-agent.socket"
+ExecStart=/usr/bin/moolticute_ssh-agent --address=${SSH_AUTH_SOCK} --no-fork
 
 [Install]
 WantedBy=default.target
