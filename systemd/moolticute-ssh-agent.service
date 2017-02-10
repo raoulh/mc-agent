@@ -1,5 +1,6 @@
 [Unit]
 Description=Moolticute SSH key agent
+Requires=moolticuted.service
 
 [Service]
 Type=simple
