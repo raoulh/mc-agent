@@ -21,6 +21,7 @@ function upload_file()
         -F "upload_folder=$INSTALLPATH" \
         -F "upload_sha256=$HASH" \
         -F "upload_file=@$FNAME" \
+        -F "upload_force=true" \
         --progress-bar \
         https://calaos.fr/mooltipass/upload -o upload.log
     rm -f upload.log

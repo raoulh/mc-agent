@@ -26,6 +26,8 @@ var (
 	timeoutClearKeys Duration = Duration(time.Minute * 15)
 	mcUrl            *string
 	debugOpt         *bool
+	cliAction        *string
+	outputProgress   *bool //used by moolticute for loading keys into gui
 )
 
 // Declare Duration type for CLI
@@ -56,11 +58,13 @@ func main() {
 
 	app := cli.App("moolticute_ssh-agent", "SSH agent that use moolticute to store/load your keys")
 
-	app.Spec = "[-d][-m][--debug]"
+	app.Spec = "[-d][-m][--debug][-p][-c]"
 
 	app.VarOpt("d duration", &timeoutClearKeys, "How long you want the agent to keep keys into memory (default to 15min)")
 	mcUrl = app.StringOpt("m moolticute_url", MOOLTICUTE_DAEMON_URL, "Use a different url for connecting to moolticute")
 	debugOpt = app.BoolOpt("debug", false, "Add debug log to stdout")
+	cliAction = app.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
+	outputProgress = app.BoolOpt("p output_progress", false, "Used by moolticute GUI")
 
 	SetupPlatformOpts(app)
 
@@ -70,7 +74,12 @@ func main() {
 			log.SetFlags(0)
 			log.SetOutput(ioutil.Discard)
 		}
-		RunAgent()
+
+		if *cliAction == "" {
+			RunAgent()
+		} else {
+			doCliAction(*cliAction)
+		}
 	}
 
 	if err := app.Run(os.Args); err != nil {

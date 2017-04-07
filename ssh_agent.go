@@ -369,6 +369,13 @@ func (a *SshAgent) addKeyFromMoolticute(req []byte) error {
 	if err != nil {
 		return err
 	}
+
+	mck := McKey{
+		keyBlob:  req,
+		addedKey: addedKey,
+	}
+	a.Keys = append(a.Keys, mck)
+
 	return a.keyring.Add(*addedKey)
 }
 
