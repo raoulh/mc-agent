@@ -7,5 +7,16 @@ Type=simple
 Environment="SSH_AUTH_SOCK=%t/moolticute-ssh-agent.socket"
 ExecStart=/usr/bin/mc-agent --address=${SSH_AUTH_SOCK} --no-fork
 
+RuntimeDirectory=mc-agent
+RuntimeDirectoryMode=700
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryDenyWriteExecute=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_NETLINK AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+
 [Install]
 WantedBy=default.target
