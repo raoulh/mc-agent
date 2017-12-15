@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"reflect"
 	"sync"
 	"time"
 
@@ -222,7 +221,7 @@ func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 
 		//find the key
 		for i, k := range l {
-			if fingerprintSHA256(k) == fingerprintSHA256(keyToDel) {
+			if fingerprintSHA256(k) == fingerprintSHA256(&keyToDel) {
 				//found the key, delete it
 				copy(a.Keys[i:], a.Keys[i+1:])
 				a.Keys[len(a.Keys)-1].addedKey = nil //do not leak
