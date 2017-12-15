@@ -27,27 +27,33 @@ func doCliAction(action string) {
 	log.Println("CLI Action:", action)
 	var err error
 
+	var jarray []JsonKey
 	if action == "list" {
-		err = doList()
+		jarray, err = doList()
 	}
 
 	if err != nil {
 		log.Println("Error:", err)
+		return
 	}
+
+	jsonData, _ := json.Marshal(jarray)
+	fmt.Println(string(jsonData))
 }
 
 type JsonKey struct {
-	PublicKey  string
-	PrivateKey string
+	PublicKey   string
+	PrivateKey  string
+	Fingerprint string
 }
 
-func doList() (err error) {
+func doList() (jarray []JsonKey, err error) {
 	a := NewSshAgent()
 
 	k, err := McLoadKeys()
 	if err == nil {
 		if err = a.addKeysToKeychain(k); err != nil {
-			return fmt.Errorf("Failed to load keys from Moolticute: %v", err)
+			return jarray, fmt.Errorf("Failed to load keys from Moolticute: %v", err)
 		} else {
 			if len(*k) > 0 { //only set keys loaded if keys are present
 				a.keysLoaded = true
@@ -58,18 +64,17 @@ func doList() (err error) {
 
 	keys, err := a.keyring.List()
 	if err != nil {
-		return err
+		return jarray, err
 	}
 
 	for i, k := range keys {
 		a.Keys[i].pubKey = k
 	}
 
-	var jarray []JsonKey
-
 	for _, mck := range a.Keys {
 		jkey := JsonKey{
-			PublicKey: mck.pubKey.String(),
+			PublicKey:   mck.pubKey.String(),
+			Fingerprint: fingerprintSHA256(mck.pubKey),
 		}
 
 		//Read the key blob and recreate a usable key format for the user
@@ -79,12 +84,11 @@ func doList() (err error) {
 		}
 
 		if err := ssh.Unmarshal(mck.keyBlob, &record); err != nil {
-			return err
+			return jarray, err
 		}
 
 		var addedKey *agent.AddedKey
 		var priv interface{}
-		var err error
 
 		switch record.Type {
 		case ssh.KeyAlgoRSA:
@@ -108,10 +112,10 @@ func doList() (err error) {
 		case ssh.CertAlgoED25519v01:
 			addedKey, err = parseEd25519Cert(mck.keyBlob)
 		default:
-			return fmt.Errorf("key type not implemented: %q", record.Type)
+			return jarray, fmt.Errorf("key type not implemented: %q", record.Type)
 		}
 		if err != nil {
-			return err
+			return jarray, err
 		}
 
 		pemblock := pemBlockForKey(priv, mck.pubKey)
@@ -124,9 +128,6 @@ func doList() (err error) {
 
 		jarray = append(jarray, jkey)
 	}
-
-	jsonData, _ := json.Marshal(jarray)
-	fmt.Println(string(jsonData))
 
 	return
 }
@@ -204,5 +205,55 @@ func pemBlockForKey(priv interface{}, agentPubKey *agent.Key) *pem.Block {
 	default:
 		fmt.Println("Unknown key type:", reflect.TypeOf(priv))
 		return nil
+	}
+}
+
+type ListKeyAction int
+
+const (
+	ListPublicKeys ListKeyAction = iota
+	ListPubFinger
+	ListPrivKey
+)
+
+func listKeysCommand(action ListKeyAction, keyNum int) {
+	jarray, err := doList()
+
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	if keyNum >= len(jarray) {
+		fmt.Println("Error:", keyNum, "is out of range. Only", len(jarray), "keys available.")
+		return
+	}
+
+	switch action {
+	case ListPublicKeys:
+		if keyNum < 0 {
+			for i, k := range jarray {
+				fmt.Printf("[%d]: %s\n", i, k.PublicKey)
+			}
+		} else {
+			fmt.Printf("%s\n", jarray[keyNum].PublicKey)
+		}
+	case ListPubFinger:
+		fmt.Println("Print fingerprints")
+		if keyNum < 0 {
+			for i, k := range jarray {
+				fmt.Printf("[%d]: %s\n", i, k.Fingerprint)
+			}
+		} else {
+			fmt.Printf("%s\n", jarray[keyNum].Fingerprint)
+		}
+	case ListPrivKey:
+		if keyNum < 0 {
+			for i, k := range jarray {
+				fmt.Printf("Private key %d:\n%s\n", i, k.PrivateKey)
+			}
+		} else {
+			fmt.Printf("%s\n", jarray[keyNum].PrivateKey)
+		}
 	}
 }

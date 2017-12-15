@@ -28,6 +28,8 @@ var (
 	debugOpt         *bool
 	cliAction        *string
 	outputProgress   *bool //used by moolticute for loading keys into gui
+	listFingerprints *bool
+	keyNumber        *int
 )
 
 // Declare Duration type for CLI
@@ -56,33 +58,75 @@ func exit(err error, exit int) {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	app := cli.App("moolticute_ssh-agent", "SSH agent that use moolticute to store/load your keys")
+	app := cli.App("mc-agent", "SSH agent that use moolticute to store/load your keys")
 
-	app.Spec = "[-d][-m][--debug][-p][-c]"
+	app.Spec = "[-d][-m][--debug][-p]"
 
 	app.VarOpt("d duration", &timeoutClearKeys, "How long you want the agent to keep keys into memory (default to 15min)")
 	mcUrl = app.StringOpt("m moolticute_url", MOOLTICUTE_DAEMON_URL, "Use a different url for connecting to moolticute")
 	debugOpt = app.BoolOpt("debug", false, "Add debug log to stdout")
-	cliAction = app.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
 	outputProgress = app.BoolOpt("p output_progress", false, "Used by moolticute GUI")
+	//	printPriv = app.IntOpt("private_key", 0, "Print the private key n in PEM format")
 
 	SetupPlatformOpts(app)
 
-	app.Action = func() {
-		if !*debugOpt {
-			//completely disable debug output
-			log.SetFlags(0)
-			log.SetOutput(ioutil.Discard)
-		}
+	app.Command("public", "List public key parameters of all identities", func(cmd *cli.Cmd) {
+		var (
+			listFingerprints = cmd.BoolOpt("l", false, "List fingerprints of all identities instead of public keys")
+			keyNumber        = cmd.IntArg("KEYNUM", -1, "Select which key to output, default displays all keys")
+		)
 
-		if *cliAction == "" {
-			RunAgent()
-		} else {
+		cmd.Spec = "[KEYNUM] [OPTIONS]"
+
+		cmd.Action = func() {
+			setupLogger()
+			if *listFingerprints {
+				listKeysCommand(ListPubFinger, *keyNumber)
+			} else {
+				listKeysCommand(ListPublicKeys, *keyNumber)
+			}
+		}
+	})
+
+	app.Command("private", "Print the private key in PEM format", func(cmd *cli.Cmd) {
+		var (
+			keyNumber = cmd.IntArg("KEYNUM", 0, "Select which key to output")
+		)
+
+		cmd.Spec = "[KEYNUM]"
+
+		cmd.Action = func() {
+			setupLogger()
+			listKeysCommand(ListPrivKey, *keyNumber)
+		}
+	})
+
+	app.Command("cli", "CLI API to play with keys from within the moolticute GUI", func(cmd *cli.Cmd) {
+		var (
+			cliAction = cmd.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
+		)
+
+		cmd.Action = func() {
+			setupLogger()
 			doCliAction(*cliAction)
 		}
+	})
+
+	//Main action of the tool is to start the Agent
+	app.Action = func() {
+		setupLogger()
+		RunAgent()
 	}
 
 	if err := app.Run(os.Args); err != nil {
 		exit(err, 1)
+	}
+}
+
+func setupLogger() {
+	if !*debugOpt {
+		//completely disable debug output
+		log.SetFlags(0)
+		log.SetOutput(ioutil.Discard)
 	}
 }
