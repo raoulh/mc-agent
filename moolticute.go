@@ -95,7 +95,7 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 			return
 		}
 
-		if recv.Msg == "progress" && *outputProgress == true {
+		if (recv.Msg == "progress" || recv.Msg == "progress_datailed") && *outputProgress == true {
 			fmt.Println(string(data))
 		}
 
