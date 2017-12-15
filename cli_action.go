@@ -74,7 +74,7 @@ func doList() (jarray []JsonKey, err error) {
 	for _, mck := range a.Keys {
 		jkey := JsonKey{
 			PublicKey:   mck.pubKey.String(),
-			Fingerprint: fingerprintSHA256(mck.pubKey),
+			Fingerprint: fingerprintSHA256(mck.pubKey) + " " + mck.pubKey.Comment + " (" + mck.pubKey.Format + ")",
 		}
 
 		//Read the key blob and recreate a usable key format for the user

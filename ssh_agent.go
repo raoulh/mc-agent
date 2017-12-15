@@ -439,7 +439,7 @@ func (a *SshAgent) insertIdentity(req []byte) error {
 
 	//check if the key was not already added by comparing pub keys
 	for _, k := range l {
-		if reflect.DeepEqual(k, lst[0]) {
+		if fingerprintSHA256(lst[0]) == fingerprintSHA256(k) {
 			log.Println("Key already in keychain")
 			return nil
 		}

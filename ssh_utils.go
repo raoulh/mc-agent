@@ -15,5 +15,5 @@ import (
 func fingerprintSHA256(pubKey *agent.Key) string {
 	sha256sum := sha256.Sum256(pubKey.Blob)
 	hash := base64.RawStdEncoding.EncodeToString(sha256sum[:])
-	return "SHA256:" + hash + " " + pubKey.Comment + " (" + pubKey.Format + ")"
+	return "SHA256:" + hash
 }
