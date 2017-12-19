@@ -30,6 +30,8 @@ var (
 	outputProgress   *bool //used by moolticute for loading keys into gui
 	listFingerprints *bool
 	keyNumber        *int
+	allKeys          *bool
+	keyFilename      *string
 )
 
 // Declare Duration type for CLI
@@ -66,7 +68,6 @@ func main() {
 	mcUrl = app.StringOpt("m moolticute_url", MOOLTICUTE_DAEMON_URL, "Use a different url for connecting to moolticute")
 	debugOpt = app.BoolOpt("debug", false, "Add debug log to stdout")
 	outputProgress = app.BoolOpt("p output_progress", false, "Used by moolticute GUI")
-	//	printPriv = app.IntOpt("private_key", 0, "Print the private key n in PEM format")
 
 	SetupPlatformOpts(app)
 
@@ -101,14 +102,46 @@ func main() {
 		}
 	})
 
+	app.Command("delete", "Remove and delete a key from the device", func(cmd *cli.Cmd) {
+		var (
+			keyNumber = cmd.IntArg("KEYNUM", 0, "Select which key to delete")
+			allKeys   = cmd.BoolOpt("a all", false, "Remove all keys")
+		)
+
+		cmd.Spec = "KEYNUM | --all"
+
+		cmd.Action = func() {
+			setupLogger()
+			if *allKeys {
+				*keyNumber = -1
+			}
+			delKeysCommand(*keyNumber)
+		}
+	})
+
+	app.Command("add", "Add a key into the keychain", func(cmd *cli.Cmd) {
+		var (
+			keyFilename = cmd.StringArg("KEY", "", "The private key to import into the device")
+		)
+
+		cmd.Spec = "KEY"
+
+		cmd.Action = func() {
+			setupLogger()
+			addKeyCommand(*keyFilename)
+		}
+	})
+
 	app.Command("cli", "CLI API to play with keys from within the moolticute GUI", func(cmd *cli.Cmd) {
 		var (
-			cliAction = cmd.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
+			keyNumber   = cmd.IntOpt("num", 0, "Select which key to use")
+			keyFilename = cmd.StringOpt("key", "", "The private key to import into the device")
+			cliAction   = cmd.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
 		)
 
 		cmd.Action = func() {
 			setupLogger()
-			doCliAction(*cliAction)
+			doCliAction(*cliAction, *keyNumber, *keyFilename)
 		}
 	})
 
