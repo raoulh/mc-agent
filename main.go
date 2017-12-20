@@ -31,6 +31,7 @@ var (
 	listFingerprints *bool
 	keyNumber        *int
 	allKeys          *bool
+	keysFilename     *[]string
 	keyFilename      *string
 )
 
@@ -119,29 +120,34 @@ func main() {
 		}
 	})
 
-	app.Command("add", "Add a key into the keychain", func(cmd *cli.Cmd) {
+	app.Command("add", "Add one or more keys into the keychain", func(cmd *cli.Cmd) {
 		var (
-			keyFilename = cmd.StringArg("KEY", "", "The private key to import into the device")
+			keysFilename = cmd.Strings(cli.StringsArg{
+				Name: "KEY",
+				Desc: "Private keys to import into the device",
+			})
 		)
 
-		cmd.Spec = "KEY"
+		cmd.Spec = "KEY..."
 
 		cmd.Action = func() {
 			setupLogger()
-			addKeyCommand(*keyFilename)
+			addKeysCommand(*keysFilename)
 		}
 	})
 
 	app.Command("cli", "CLI API to play with keys from within the moolticute GUI", func(cmd *cli.Cmd) {
 		var (
 			keyNumber   = cmd.IntOpt("num", 0, "Select which key to use")
-			keyFilename = cmd.StringOpt("key", "", "The private key to import into the device")
 			cliAction   = cmd.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
+			keyFilename = cmd.StringOpt("key", "", "Private key to import into the device")
 		)
 
 		cmd.Action = func() {
 			setupLogger()
-			doCliAction(*cliAction, *keyNumber, *keyFilename)
+			fnames := make([]string, 1)
+			fnames[0] = *keyFilename
+			doCliAction(*cliAction, *keyNumber, fnames)
 		}
 	})
 

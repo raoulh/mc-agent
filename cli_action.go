@@ -8,7 +8,6 @@ import (
 	"encoding/asn1"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -40,7 +39,21 @@ func createJsonError(e bool, m string) string {
 	return string(js)
 }
 
-func doCliAction(action string, keyNum int, filename string) {
+type ErrorCollector []error
+
+func (c *ErrorCollector) Collect(e error) {
+	*c = append(*c, e)
+}
+
+func (c *ErrorCollector) Error() (err string) {
+	for _, e := range *c {
+		err += fmt.Sprintf("%s\n", e.Error())
+	}
+
+	return err
+}
+
+func doCliAction(action string, keyNum int, filename []string) {
 	log.Println("CLI Action:", action)
 	var err error
 	var jsonData string
@@ -67,8 +80,8 @@ func doCliAction(action string, keyNum int, filename string) {
 	}
 
 	if action == "add" {
-		if err := addKey(filename); err != nil {
-			jsonData = createJsonError(true, fmt.Sprintf("Failed to add key: %v", err))
+		if err := addKeys(filename); err != nil {
+			jsonData = createJsonError(true, fmt.Sprintf("Failed to add key:\n%v", err.Error()))
 		} else {
 			jsonData = createJsonError(false, "")
 		}
@@ -299,63 +312,100 @@ func delKeys(keyNum int) (err error) {
 	return err
 }
 
-func addKeyCommand(filename string) {
-	if err := addKey(filename); err != nil {
-		fmt.Println("Failed to add key:", err)
+func addKeysCommand(filename []string) {
+	if err := addKeys(filename); err != nil {
+		fmt.Printf("Errors collected:\n%s", err.Error())
 	} else {
 		fmt.Println("Key added successfully")
 	}
 }
 
-func addKey(filename string) (err error) {
-	fileData, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return fmt.Errorf("Failed to read file, %v", err)
+type AddKey struct {
+	AddedKey *agent.AddedKey
+	PubKey   *agent.Key
+	Filename string
+}
+
+func addKeys(filename []string) (loadErrors ErrorCollector) {
+	var newKeys []AddKey
+
+	for _, f := range filename {
+		fileData, err := ioutil.ReadFile(f)
+		if err != nil {
+			loadErrors.Collect(fmt.Errorf("[%s] Failed to read file, %v", f, err))
+			continue
+		}
+
+		key, err := ssh.ParseRawPrivateKey(fileData)
+		if err != nil {
+			loadErrors.Collect(fmt.Errorf("[%s] Failed to parse, %v", f, err))
+			continue
+		}
+
+		//Reparse the file and try to read the comment. The Golang api does
+		// not export the comment field
+		var comment string
+
+		block, _ := pem.Decode(fileData)
+		if block == nil {
+			loadErrors.Collect(fmt.Errorf("[%s] No SSH keys found, %v", f, err))
+			continue
+		}
+
+		switch block.Type {
+		case "OPENSSH PRIVATE KEY":
+			//In openssh format the comment is included inside the data block
+			comment = readOpensshComment(block.Bytes)
+		}
+
+		if comment == "" {
+			//try reading the comment from the .pub file
+			comment = readPubComment(f + ".pub")
+		}
+
+		addedKey := &agent.AddedKey{
+			PrivateKey: key,
+			Comment:    comment,
+		}
+
+		//Get public key
+		pubKey, err := getPubKey(addedKey)
+		if err != nil {
+			loadErrors.Collect(fmt.Errorf("Failed to get public key, %v", err))
+			continue
+		}
+
+		//Check duplicated keys
+		isDup := false
+		for _, k := range newKeys {
+			if fingerprintSHA256(pubKey) == fingerprintSHA256(k.PubKey) {
+				loadErrors.Collect(fmt.Errorf("[%s] Key with fingerprint %v is a duplicate. Not adding this one", f, fingerprintSHA256(k.PubKey)))
+				isDup = true
+			}
+		}
+
+		if !isDup {
+			newKeys = append(newKeys, AddKey{
+				AddedKey: addedKey,
+				PubKey:   pubKey,
+				Filename: f,
+			})
+		}
 	}
 
-	key, err := ssh.ParseRawPrivateKey(fileData)
-	if err != nil {
-		return fmt.Errorf("Failed to parse file, %v", err)
-	}
-
-	//Reparse the file and try to read the comment. The Golang api does
-	// not export the comment field
-	var comment string
-
-	block, _ := pem.Decode(fileData)
-	if block == nil {
-		return errors.New("ssh: no key found")
-	}
-
-	switch block.Type {
-	case "OPENSSH PRIVATE KEY":
-		//In openssh format the comment is included inside the data block
-		comment = readOpensshComment(block.Bytes)
-	}
-
-	if comment == "" {
-		//try reading the comment from the .pub file
-		comment = readPubComment(filename + ".pub")
-	}
-
-	addedKey := &agent.AddedKey{
-		PrivateKey: key,
-		Comment:    comment,
+	if len(newKeys) == 0 {
+		loadErrors.Collect(fmt.Errorf("No keys to add"))
+		return
 	}
 
 	a := NewSshAgent()
-
-	//Get public key
-	pubKey, err := getPubKey(addedKey)
-	if err != nil {
-		return err
-	}
 
 	//Load keys from MC
 	k, err := McLoadKeys()
 	if err == nil {
 		if err = a.addKeysToKeychain(k); err != nil {
-			return fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
+			loadErrors.Collect(fmt.Errorf("Failed to load keys from Moolticute: %v\n", err))
+			return
 		} else {
 			if len(*k) > 0 { //only set keys loaded if keys are present
 				a.keysLoaded = true
@@ -366,24 +416,38 @@ func addKey(filename string) (err error) {
 
 	l, err := a.keyring.List()
 	if err != nil {
-		return err
+		loadErrors.Collect(fmt.Errorf("Failed to list keychain, %v", err))
+		return
 	}
 
 	//check if the key was not already added by comparing pub keys
-	for _, k := range l {
-		log.Println("Comparing fingerprint", fingerprintSHA256(pubKey), "==", fingerprintSHA256(k))
-		if fingerprintSHA256(pubKey) == fingerprintSHA256(k) {
-			return fmt.Errorf("Key with fingerprint %v is already in the keychain. Not adding anything", fingerprintSHA256(k))
+	aKeyWasAdded := false
+	for _, ak := range newKeys {
+		isAlreadyAdded := false
+		for _, k := range l {
+			log.Println("Comparing fingerprint", fingerprintSHA256(ak.PubKey), "==", fingerprintSHA256(k))
+			if fingerprintSHA256(ak.PubKey) == fingerprintSHA256(k) {
+				loadErrors.Collect(fmt.Errorf("[%s] This key with fingerprint %v is already in the keychain. Skipping.", ak.Filename, fingerprintSHA256(k)))
+				isAlreadyAdded = true
+			}
+		}
+
+		if !isAlreadyAdded {
+			mck := AddedKeyToMcKey(ak.AddedKey)
+			a.Keys = append(a.Keys, mck)
+			aKeyWasAdded = true
 		}
 	}
 
-	mck := AddedKeyToMcKey(addedKey)
-	a.Keys = append(a.Keys, mck)
+	if !aKeyWasAdded {
+		loadErrors.Collect(fmt.Errorf("Nothing to add. Aborting."))
+		return
+	}
 
 	//Send keys to moolticute
 	if err := McSetKeys(a.ToMcKeys()); err != nil {
-		return err
+		loadErrors.Collect(fmt.Errorf("Failed to send keys to device, %v", err))
 	}
 
-	return
+	return loadErrors
 }
