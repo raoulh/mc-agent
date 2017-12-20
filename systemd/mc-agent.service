@@ -5,7 +5,7 @@ Wants=moolticuted.service
 [Service]
 Type=simple
 Environment="SSH_AUTH_SOCK=%t/moolticute-ssh-agent.socket"
-ExecStart=/usr/bin/moolticute_ssh-agent --address=${SSH_AUTH_SOCK} --no-fork
+ExecStart=/usr/bin/mc-agent --address=${SSH_AUTH_SOCK} --no-fork
 
 [Install]
 WantedBy=default.target
