@@ -14,7 +14,6 @@ import (
 	"log"
 	"math/big"
 	"reflect"
-	"strings"
 
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
@@ -86,6 +85,7 @@ type JsonKey struct {
 
 func doList() (jarray []JsonKey, err error) {
 	a := NewSshAgent()
+	jarray = make([]JsonKey, 0)
 
 	k, err := McLoadKeys()
 	if err == nil {
@@ -99,63 +99,18 @@ func doList() (jarray []JsonKey, err error) {
 		}
 	}
 
-	keys, err := a.keyring.List()
-	if err != nil {
-		return jarray, err
-	}
-
-	for i, k := range keys {
-		a.Keys[i].pubKey = k
-	}
-
-	for _, mck := range a.Keys {
-		jkey := JsonKey{
-			PublicKey:   mck.pubKey.String(),
-			Fingerprint: fingerprintSHA256(mck.pubKey) + " " + mck.pubKey.Comment + " (" + mck.pubKey.Format + ")",
-		}
-
-		//Read the key blob and recreate a usable key format for the user
-		var record struct {
-			Type string `sshtype:"17|25"`
-			Rest []byte `ssh:"rest"`
-		}
-
-		if err := ssh.Unmarshal(mck.keyBlob, &record); err != nil {
-			return jarray, err
-		}
-
-		var addedKey *agent.AddedKey
-		var priv interface{}
-
-		switch record.Type {
-		case ssh.KeyAlgoRSA:
-			addedKey, err = parseRSAKey(mck.keyBlob)
-			priv = addedKey.PrivateKey
-		case ssh.KeyAlgoDSA:
-			addedKey, err = parseDSAKey(mck.keyBlob)
-			priv = addedKey.PrivateKey
-		case ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
-			addedKey, err = parseECDSAKey(mck.keyBlob)
-			priv = addedKey.PrivateKey
-		case ssh.KeyAlgoED25519:
-			addedKey, err = parseEd25519Key(mck.keyBlob)
-			priv = addedKey.PrivateKey
-		case ssh.CertAlgoRSAv01:
-			addedKey, err = parseRSACert(mck.keyBlob)
-		case ssh.CertAlgoDSAv01:
-			addedKey, err = parseDSACert(mck.keyBlob)
-		case ssh.CertAlgoECDSA256v01, ssh.CertAlgoECDSA384v01, ssh.CertAlgoECDSA521v01:
-			addedKey, err = parseECDSACert(mck.keyBlob)
-		case ssh.CertAlgoED25519v01:
-			addedKey, err = parseEd25519Cert(mck.keyBlob)
-		default:
-			return jarray, fmt.Errorf("key type not implemented: %q", record.Type)
-		}
+	for i, mck := range a.Keys {
+		pubKey, err := getPubKeyRaw(mck.PrivateKey, mck.Comment)
 		if err != nil {
-			return jarray, err
+			return jarray, fmt.Errorf("Failed to get pub key for key #%d: %v", i, err)
 		}
 
-		pemblock := pemBlockForKey(priv, mck.pubKey)
+		jkey := JsonKey{
+			PublicKey:   pubKey.String(),
+			Fingerprint: fingerprintSHA256(pubKey) + " " + pubKey.Comment + " (" + pubKey.Format + ")",
+		}
+
+		pemblock := pemBlockForKey(mck.PrivateKey, pubKey)
 		if pemblock != nil {
 			jkey.PrivateKey = string(pem.EncodeToMemory(pemblock))
 		} else {
@@ -310,31 +265,29 @@ func delKeysCommand(keyNum int) {
 func delKeys(keyNum int) (err error) {
 	a := NewSshAgent()
 
-	k, err := McLoadKeys()
-	if err == nil {
-		if err = a.addKeysToKeychain(k); err != nil {
-			return fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
-		} else {
-			if len(*k) > 0 { //only set keys loaded if keys are present
-				a.keysLoaded = true
-			}
-			log.Println(len(*k), "keys loaded from MP")
-		}
-	}
-
 	if keyNum < 0 {
 		if err := a.removeAllKeys(true); err != nil {
 			return fmt.Errorf("Failed to remove all keys: %v", err)
 		}
 	} else {
+		k, err := McLoadKeys()
+		if err == nil {
+			if err = a.addKeysToKeychain(k); err != nil {
+				return fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
+			} else {
+				if len(*k) > 0 { //only set keys loaded if keys are present
+					a.keysLoaded = true
+				}
+				log.Println(len(*k), "keys loaded from MP")
+			}
+		}
+
 		if keyNum >= len(*k) {
-			return fmt.Errorf("Error:", keyNum, "is out of range. Only", len(*k), "keys available.")
+			return fmt.Errorf("Error: %d is out of range. Only %d keys available.", keyNum, len(*k))
 		}
 
 		//found the key, delete it
 		copy(a.Keys[keyNum:], a.Keys[keyNum+1:])
-		a.Keys[len(a.Keys)-1].addedKey = nil //do not leak
-		a.Keys[len(a.Keys)-1].pubKey = nil   //do not leak
 		a.Keys = a.Keys[:len(a.Keys)-1]
 
 		//Send keys to moolticute
@@ -387,24 +340,28 @@ func addKey(filename string) (err error) {
 
 	addedKey := &agent.AddedKey{
 		PrivateKey: key,
-		Comment:    "pouet pouet", /*comment*/
+		Comment:    comment,
 	}
 
 	a := NewSshAgent()
 
-	//create a temporary keychain
-	tempKeychain := agent.NewKeyring()
-	if err = tempKeychain.Add(*addedKey); err != nil {
-		return err
-	}
-
-	lst, err := tempKeychain.List()
+	//Get public key
+	pubKey, err := getPubKey(addedKey)
 	if err != nil {
 		return err
 	}
 
-	if len(lst) != 1 {
-		return fmt.Errorf("wrong keychain List()")
+	//Load keys from MC
+	k, err := McLoadKeys()
+	if err == nil {
+		if err = a.addKeysToKeychain(k); err != nil {
+			return fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
+		} else {
+			if len(*k) > 0 { //only set keys loaded if keys are present
+				a.keysLoaded = true
+			}
+			log.Println(len(*k), "keys loaded from MP")
+		}
 	}
 
 	l, err := a.keyring.List()
@@ -414,106 +371,19 @@ func addKey(filename string) (err error) {
 
 	//check if the key was not already added by comparing pub keys
 	for _, k := range l {
-		if fingerprintSHA256(lst[0]) == fingerprintSHA256(k) {
+		log.Println("Comparing fingerprint", fingerprintSHA256(pubKey), "==", fingerprintSHA256(k))
+		if fingerprintSHA256(pubKey) == fingerprintSHA256(k) {
 			return fmt.Errorf("Key with fingerprint %v is already in the keychain. Not adding anything", fingerprintSHA256(k))
 		}
 	}
 
-	mck := McKey{
-		//		keyBlob:  req,
-		addedKey: addedKey,
-		pubKey:   lst[0],
-	}
+	mck := AddedKeyToMcKey(addedKey)
 	a.Keys = append(a.Keys, mck)
 
-	fmt.Println(mck.pubKey)
-
 	//Send keys to moolticute
-	//	if err := McSetKeys(a.ToMcKeys()); err != nil {
-	//		return err
-	//	}
+	if err := McSetKeys(a.ToMcKeys()); err != nil {
+		return err
+	}
 
 	return
-}
-
-func readOpensshComment(data []byte) string {
-	magic := append([]byte("openssh-key-v1"), 0)
-	remaining := data[len(magic):]
-
-	var w struct {
-		CipherName   string
-		KdfName      string
-		KdfOpts      string
-		NumKeys      uint32
-		PubKey       []byte
-		PrivKeyBlock []byte
-	}
-
-	if err := ssh.Unmarshal(remaining, &w); err != nil {
-		return ""
-	}
-
-	pk1 := struct {
-		Check1  uint32
-		Check2  uint32
-		Keytype string
-		Rest    []byte `ssh:"rest"`
-	}{}
-
-	if err := ssh.Unmarshal(w.PrivKeyBlock, &pk1); err != nil {
-		return ""
-	}
-
-	switch pk1.Keytype {
-	case ssh.KeyAlgoRSA:
-		// https://github.com/openssh/openssh-portable/blob/master/sshkey.c#L2760-L2773
-		key := struct {
-			N       *big.Int
-			E       *big.Int
-			D       *big.Int
-			Iqmp    *big.Int
-			P       *big.Int
-			Q       *big.Int
-			Comment string
-			Pad     []byte `ssh:"rest"`
-		}{}
-
-		if err := ssh.Unmarshal(pk1.Rest, &key); err != nil {
-			return ""
-		}
-
-		return key.Comment
-	case ssh.KeyAlgoED25519:
-		key := struct {
-			Pub     []byte
-			Priv    []byte
-			Comment string
-			Pad     []byte `ssh:"rest"`
-		}{}
-
-		if err := ssh.Unmarshal(pk1.Rest, &key); err != nil {
-			return ""
-		}
-
-		return key.Comment
-	default:
-		return ""
-	}
-
-	return ""
-}
-
-func readPubComment(fname string) string {
-	fileData, err := ioutil.ReadFile(fname)
-	if err != nil {
-		return ""
-	}
-
-	tokens := strings.Split(string(fileData), " ")
-
-	if len(tokens) < 3 {
-		return ""
-	}
-
-	return tokens[2]
 }

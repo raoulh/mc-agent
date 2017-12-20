@@ -98,11 +98,28 @@ type agentV1IdentityMsg struct {
 	Numkeys uint32 `sshtype:"2"`
 }
 
-//struct for maintaining moolticute keys
+// An Certificate represents an OpenSSH certificate as defined in
+// [PROTOCOL.certkeys]?rev=1.8.
+type SshCertificate struct {
+	Nonce           []byte
+	Key             ssh.PublicKey
+	Serial          uint64
+	CertType        uint32
+	KeyId           string
+	ValidPrincipals []string
+	ValidAfter      uint64
+	ValidBefore     uint64
+	ssh.Permissions
+	Reserved     []byte
+	SignatureKey ssh.PublicKey
+}
+
+//struct for maintaining moolticute keys, it contains minimal data
+//required for setting up the keys in the keychain
 type McKey struct {
-	keyBlob  []byte
-	addedKey *agent.AddedKey
-	pubKey   *agent.Key
+	PrivateKey interface{}
+	// Comment is an optional, free-form string.
+	Comment string
 }
 
 type SshAgent struct {
@@ -224,8 +241,6 @@ func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 			if fingerprintSHA256(k) == fingerprintSHA256(&keyToDel) {
 				//found the key, delete it
 				copy(a.Keys[i:], a.Keys[i+1:])
-				a.Keys[len(a.Keys)-1].addedKey = nil //do not leak
-				a.Keys[len(a.Keys)-1].pubKey = nil   //do not leak
 				a.Keys = a.Keys[:len(a.Keys)-1]
 				break
 			}
@@ -333,46 +348,15 @@ func (a *SshAgent) addKeysToKeychain(keys *McBinKeys) error {
 
 //add a key to the keychain
 func (a *SshAgent) addKeyFromMoolticute(req []byte) error {
-	var record struct {
-		Type string `sshtype:"17|25"`
-		Rest []byte `ssh:"rest"`
-	}
-
-	if err := ssh.Unmarshal(req, &record); err != nil {
+	addedKey, err := parseKeyBlob(req)
+	if err != nil {
 		return err
-	}
-
-	var addedKey *agent.AddedKey
-	var err error
-
-	switch record.Type {
-	case ssh.KeyAlgoRSA:
-		addedKey, err = parseRSAKey(req)
-	case ssh.KeyAlgoDSA:
-		addedKey, err = parseDSAKey(req)
-	case ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
-		addedKey, err = parseECDSAKey(req)
-	case ssh.KeyAlgoED25519:
-		addedKey, err = parseEd25519Key(req)
-	case ssh.CertAlgoRSAv01:
-		addedKey, err = parseRSACert(req)
-	case ssh.CertAlgoDSAv01:
-		addedKey, err = parseDSACert(req)
-	case ssh.CertAlgoECDSA256v01, ssh.CertAlgoECDSA384v01, ssh.CertAlgoECDSA521v01:
-		addedKey, err = parseECDSACert(req)
-	case ssh.CertAlgoED25519v01:
-		addedKey, err = parseEd25519Cert(req)
-	default:
-		return fmt.Errorf("agent: not implemented: %q", record.Type)
 	}
 	if err != nil {
 		return err
 	}
 
-	mck := McKey{
-		keyBlob:  req,
-		addedKey: addedKey,
-	}
+	mck := AddedKeyToMcKey(addedKey)
 	a.Keys = append(a.Keys, mck)
 
 	return a.keyring.Add(*addedKey)
@@ -380,55 +364,15 @@ func (a *SshAgent) addKeyFromMoolticute(req []byte) error {
 
 //insert an identity into keychain
 func (a *SshAgent) insertIdentity(req []byte) error {
-	var record struct {
-		Type string `sshtype:"17|25"`
-		Rest []byte `ssh:"rest"`
-	}
-
-	if err := ssh.Unmarshal(req, &record); err != nil {
-		return err
-	}
-
-	var addedKey *agent.AddedKey
-	var err error
-
-	switch record.Type {
-	case ssh.KeyAlgoRSA:
-		addedKey, err = parseRSAKey(req)
-	case ssh.KeyAlgoDSA:
-		addedKey, err = parseDSAKey(req)
-	case ssh.KeyAlgoECDSA256, ssh.KeyAlgoECDSA384, ssh.KeyAlgoECDSA521:
-		addedKey, err = parseECDSAKey(req)
-	case ssh.KeyAlgoED25519:
-		addedKey, err = parseEd25519Key(req)
-	case ssh.CertAlgoRSAv01:
-		addedKey, err = parseRSACert(req)
-	case ssh.CertAlgoDSAv01:
-		addedKey, err = parseDSACert(req)
-	case ssh.CertAlgoECDSA256v01, ssh.CertAlgoECDSA384v01, ssh.CertAlgoECDSA521v01:
-		addedKey, err = parseECDSACert(req)
-	case ssh.CertAlgoED25519v01:
-		addedKey, err = parseEd25519Cert(req)
-	default:
-		return fmt.Errorf("agent: not implemented: %q", record.Type)
-	}
+	addedKey, err := parseKeyBlob(req)
 	if err != nil {
 		return err
 	}
 
-	//create a temporary keychain
-	tempKeychain := agent.NewKeyring()
-	if err = tempKeychain.Add(*addedKey); err != nil {
-		return err
-	}
-
-	lst, err := tempKeychain.List()
+	//Get public key
+	pubKey, err := getPubKey(addedKey)
 	if err != nil {
 		return err
-	}
-
-	if len(lst) != 1 {
-		return fmt.Errorf("wrong keychain List()")
 	}
 
 	l, err := a.keyring.List()
@@ -438,17 +382,13 @@ func (a *SshAgent) insertIdentity(req []byte) error {
 
 	//check if the key was not already added by comparing pub keys
 	for _, k := range l {
-		if fingerprintSHA256(lst[0]) == fingerprintSHA256(k) {
+		if fingerprintSHA256(pubKey) == fingerprintSHA256(k) {
 			log.Println("Key already in keychain")
 			return nil
 		}
 	}
 
-	mck := McKey{
-		keyBlob:  req,
-		addedKey: addedKey,
-		pubKey:   lst[0],
-	}
+	mck := AddedKeyToMcKey(addedKey)
 	a.Keys = append(a.Keys, mck)
 
 	//Send keys to moolticute
@@ -459,10 +399,10 @@ func (a *SshAgent) insertIdentity(req []byte) error {
 	return a.keyring.Add(*addedKey)
 }
 
-func (a SshAgent) ToMcKeys() *McBinKeys {
+func (a *SshAgent) ToMcKeys() *McBinKeys {
 	var k McBinKeys
 	for i := 0; i < len(a.Keys); i++ {
-		k = append(k, a.Keys[i].keyBlob)
+		k = append(k, a.Keys[i].ToBlob())
 	}
 	return &k
 }
