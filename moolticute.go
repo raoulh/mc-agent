@@ -95,7 +95,7 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 			return
 		}
 
-		if (recv.Msg == "progress" || recv.Msg == "progress_datailed") && *outputProgress == true {
+		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
 			fmt.Println(string(data))
 		}
 
@@ -201,6 +201,10 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		err = json.Unmarshal(data, &recv)
 		if err != nil {
 			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
+		}
+
+		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
+			fmt.Println(string(data))
 		}
 
 		if recv.Msg != "set_data_node" {

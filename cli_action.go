@@ -72,22 +72,34 @@ func doCliAction(action string, keyNum int, filename []string) {
 	}
 
 	if action == "delete" {
-		if err = delKeys(keyNum); err != nil {
+		if a, err := delKeys(keyNum); err != nil {
 			jsonData = createJsonError(true, fmt.Sprintf("Failed to delete key: %v", err))
 		} else {
-			jsonData = createJsonError(false, "")
+			jarray, err := doListJson(a)
+			if err != nil {
+				jsonData = createJsonError(true, fmt.Sprintf("Failed to parse key: %v", err))
+			} else {
+				j, _ := json.Marshal(jarray)
+				jsonData = string(j)
+			}
 		}
 	}
 
 	if action == "add" {
-		if err := addKeys(filename); err != nil {
+		if a, err := addKeys(filename); err != nil {
 			jsonData = createJsonError(true, fmt.Sprintf("Failed to add key:\n%v", err.Error()))
 		} else {
-			jsonData = createJsonError(false, "")
+			jarray, err := doListJson(a)
+			if err != nil {
+				jsonData = createJsonError(true, fmt.Sprintf("Failed to parse key: %v", err))
+			} else {
+				j, _ := json.Marshal(jarray)
+				jsonData = string(j)
+			}
 		}
 	}
 
-	fmt.Println(string(jsonData))
+	fmt.Println(jsonData)
 }
 
 type JsonKey struct {
@@ -111,6 +123,12 @@ func doList() (jarray []JsonKey, err error) {
 			log.Println(len(*k), "keys loaded from MP")
 		}
 	}
+
+	return doListJson(a)
+}
+
+func doListJson(a *SshAgent) (jarray []JsonKey, err error) {
+	jarray = make([]JsonKey, 0)
 
 	for i, mck := range a.Keys {
 		pubKey, err := getPubKeyRaw(mck.PrivateKey, mck.Comment)
@@ -268,25 +286,25 @@ func listKeysCommand(action ListKeyAction, keyNum int) {
 }
 
 func delKeysCommand(keyNum int) {
-	if err := delKeys(keyNum); err != nil {
+	if _, err := delKeys(keyNum); err != nil {
 		fmt.Println("Failed to delete key:", err)
 	} else {
 		fmt.Println("Key deleted successfully")
 	}
 }
 
-func delKeys(keyNum int) (err error) {
-	a := NewSshAgent()
+func delKeys(keyNum int) (a *SshAgent, err error) {
+	a = NewSshAgent()
 
 	if keyNum < 0 {
 		if err := a.removeAllKeys(true); err != nil {
-			return fmt.Errorf("Failed to remove all keys: %v", err)
+			return a, fmt.Errorf("Failed to remove all keys: %v", err)
 		}
 	} else {
 		k, err := McLoadKeys()
 		if err == nil {
 			if err = a.addKeysToKeychain(k); err != nil {
-				return fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
+				return a, fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
 			} else {
 				if len(*k) > 0 { //only set keys loaded if keys are present
 					a.keysLoaded = true
@@ -296,7 +314,7 @@ func delKeys(keyNum int) (err error) {
 		}
 
 		if keyNum >= len(*k) {
-			return fmt.Errorf("Error: %d is out of range. Only %d keys available.", keyNum, len(*k))
+			return a, fmt.Errorf("Error: %d is out of range. Only %d keys available.", keyNum, len(*k))
 		}
 
 		//found the key, delete it
@@ -305,15 +323,15 @@ func delKeys(keyNum int) (err error) {
 
 		//Send keys to moolticute
 		if err := McSetKeys(a.ToMcKeys()); err != nil {
-			return fmt.Errorf("Failed to remove key from moolticute: %v", err)
+			return a, fmt.Errorf("Failed to remove key from moolticute: %v", err)
 		}
 	}
 
-	return err
+	return a, err
 }
 
 func addKeysCommand(filename []string) {
-	if err := addKeys(filename); err != nil {
+	if _, err := addKeys(filename); err != nil {
 		fmt.Printf("Errors collected:\n%s", err.Error())
 	} else {
 		fmt.Println("Key added successfully")
@@ -326,7 +344,7 @@ type AddKey struct {
 	Filename string
 }
 
-func addKeys(filename []string) (loadErrors ErrorCollector) {
+func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 	var newKeys []AddKey
 
 	for _, f := range filename {
@@ -398,7 +416,7 @@ func addKeys(filename []string) (loadErrors ErrorCollector) {
 		return
 	}
 
-	a := NewSshAgent()
+	a = NewSshAgent()
 
 	//Load keys from MC
 	k, err := McLoadKeys()
@@ -449,5 +467,5 @@ func addKeys(filename []string) (loadErrors ErrorCollector) {
 		loadErrors.Collect(fmt.Errorf("Failed to send keys to device, %v", err))
 	}
 
-	return loadErrors
+	return a, loadErrors
 }
