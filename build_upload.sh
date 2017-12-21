@@ -1,4 +1,6 @@
-#!/bin/bash
+#!/bin/bash -x
+
+set -e
 
 echo "Build and upload binaries to calaos.fr"
 
@@ -27,7 +29,7 @@ function upload_file()
     rm -f upload.log
 }
 
-BIN="moolticute_ssh-agent"
+BIN="mc-agent"
 
 echo ">> Building windows bin"
 export GO15VENDOREXPERIMENT=1
@@ -37,7 +39,8 @@ export GOARCH=386
 export GOOS=windows
 go env
 rm -f ${BIN}.exe
-go build -i -ldflags "-H windowsgui"
+go get -d
+go build -v -ldflags "-H windowsgui"
 upload_file ${BIN}.exe "tools/windows"
 
 echo ">> Building linux bin"
@@ -45,7 +48,8 @@ export GOARCH=amd64
 export GOOS=linux
 go env
 rm -f $BIN ${BIN}.exe
-go build -i
+go get -d
+go build -v
 upload_file ${BIN} "tools/linux"
 
 echo ">> Building macos bin"
@@ -53,6 +57,7 @@ export GOARCH=amd64
 export GOOS=darwin
 go env
 rm -f $BIN
-go build -i
+go get -d
+go build -v
 upload_file ${BIN} "tools/macos"
 
