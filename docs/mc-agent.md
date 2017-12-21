@@ -29,7 +29,6 @@ authentication material to SSH server. Dialog between the ssh-agent and the ssh
 client is made using [UNIX domain
 socket](https://en.wikipedia.org/wiki/Unix_domain_socket "Unix domain socket").
 
-## Usage
 In order to benefit from the file storing capability of the Mooltipass, mc-agent
 rely on [Moolticute](https://github.com/mooltipass/moolticute
 "Moolticute source code") as an abstraction to the Mooltipass, thus Moolticute must
@@ -118,8 +117,11 @@ On windows, the agent emulates Putty agent. You need to stop pageant.exe (the pu
 
 ### Cygwin/Msys
 If you are using cygwin or msys and want to use the ssh-agent from there, it's a bit more complicated as it requires another layer: ssh-pageant. You can grab it from here: https://github.com/cuviper/ssh-pageant
-Then in your terminal, you would need to start this proxy in your .bashrc config file by running:
+
+Then in your terminal, you would need to start this proxy in your .bashrc config file by adding:
+```
 eval $(/usr/bin/ssh-pageant -r -a "/tmp/.ssh-pageant-$USERNAME")
+```
 After that ssh from your cygwin/msys installation would use ssh-pageant -> mc-agent -> moolticuted -> your device :)
 
 ### Windows WSL (Windows Subsystem for Linux)
@@ -129,11 +131,14 @@ If you are using WSL and bash under Windows, you can follow the Linux procedure.
 ## macOS Specifics
 
 On osx, by default the system runs an ssh-agent that connects with Keyring for the key storage. For now I did not do any work on how to replace (disable it) the system agent with moolticute agent (help welcome). The agent should be started by hand in a terminal:
+```
 eval $(/Applications/Moolticute.app/Contents/MacOS/mc-agent --address /tmp/mc-agent.socket)
+```
 
 In your other terminal you can first do:
+```
 export SSH_AUTH_SOCK=/tmp/mc-agent.socket
-
+```
 Then any ssh command typed in the terminal (that uses the correctly exported SSH_AUTH_SOCK) would use moolticute agent.
 
 ## Notes
