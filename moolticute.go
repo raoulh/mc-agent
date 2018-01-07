@@ -60,9 +60,15 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	defer c.Close()
 
+	client_uuid, err := uuid.NewV4()
+	if err != nil {
+		log.Print("Cannot generate client UUID:", err)
+		return
+	}
+
 	m := MoolticuteMsg{
 		Msg:      "get_data_node",
-		ClientId: uuid.NewV4().String(),
+		ClientId: client_uuid.String(),
 		Data: MsgData{
 			Service: "Moolticute SSH Keys",
 		},
@@ -171,9 +177,15 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		return fmt.Errorf("Failed to encode with encoding/gob: %v", err)
 	}
 
+	client_uuid, err := uuid.NewV4()
+	if err != nil {
+		log.Print("Cannot generate client UUID:", err)
+		return
+	}
+
 	m := MoolticuteMsg{
 		Msg:      "set_data_node",
-		ClientId: uuid.NewV4().String(),
+		ClientId: client_uuid.String(),
 		Data: MsgData{
 			Service:  "Moolticute SSH Keys",
 			NodeData: base64.StdEncoding.EncodeToString(buffer.Bytes()),
