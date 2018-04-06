@@ -20,7 +20,7 @@ On the Windows platform, mc-agent fully replaces the Putty SSH agent. Thus all P
 can be used transparently with mc-agent.
 
 ### ssh-agent
-ssh-agent are used to store the unencrypted format of key used for authenticating
+ssh-agent is used to store the unencrypted format of key used for authenticating
 against SSH server. That is, one is able to permanently store its key in a "secure
 way" (encrypted on disk, security tokens, Mooltipass), with only need to provided
 material for getting its non-encrypted version one. Basically, the encrypted key
