@@ -373,7 +373,7 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 				continue
 			}
 
-		} else {
+		} else if err != nil {
 			loadErrors.Collect(fmt.Errorf("[%s] Failed to parse, %v", f, err))
 			continue
 		}
