@@ -61,7 +61,7 @@ func exit(err error, exit int) {
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	app := cli.App("mc-agent", "SSH agent that use moolticute to store/load your keys")
+	app := cli.App("mc-agent", LongHelpText)
 
 	app.Spec = "[-d][-m][--debug][-p]"
 
