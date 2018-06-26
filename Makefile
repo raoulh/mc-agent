@@ -1,5 +1,5 @@
 
-APPNAME = moolticute_ssh-agent
+APPNAME = mc-agent
 
 TAGS = ""
 BUILD_FLAGS = "-v"
