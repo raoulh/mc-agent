@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"os"
 
 	"github.com/gorilla/websocket"
 	"github.com/satori/go.uuid"
@@ -103,6 +104,7 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 
 		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
 			fmt.Println(string(data))
+			os.Stdout.Sync()
 		}
 
 		if recv.Msg != "get_data_node" {
@@ -217,6 +219,7 @@ func McSetKeys(keys *McBinKeys) (err error) {
 
 		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
 			fmt.Println(string(data))
+			os.Stdout.Sync()
 		}
 
 		if recv.Msg != "set_data_node" {
