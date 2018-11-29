@@ -3,7 +3,7 @@
 mc-agent is built by [Mooltipass](https://www.themooltipass.com/
 "Mooltipass website") community in order to provide a tool that
 comply to the
-[ssh-agent](https://tools.ietf.org/html/draft-miller-ssh-agent-00#section-1
+[ssh-agent](https://tools.ietf.org/html/draft-miller-ssh-agent-02#section-1
 "SSH-agent reference") standard from the OpenSSH project.
 mc-agent provide the ability to load and store private key that are used for
 authentication using the [SSH](https://www.openssh.com/specs.html
