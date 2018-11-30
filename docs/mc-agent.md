@@ -148,7 +148,7 @@ Then any ssh command typed in the terminal (that uses the correctly exported SSH
 > ```
 > $ readonly _MC_AGENT_SOCK=/tmp/moolticute-ssh-agent693404146/agent.sock
 > $ readonly  _SSH_AGENT_SOCK=/dev/shm/user/ssh-hEGNcVM1Dk1Q/agent.27852
-> 
+>
 > $ SSH_AUTH_SOCK="${_SSH_AGENT_SOCK}" ssh-add -l
 > 256 SHA256:aUoc2OHexFL8E/JcJ/dAxG/Rt7Y+t7YkdaIjki/dLhE user@loulou (ED25519)
 > $ SSH_AUTH_SOCK="${_MC_AGENT_SOCK}" ssh-add -l
@@ -156,7 +156,7 @@ Then any ssh command typed in the terminal (that uses the correctly exported SSH
 > ```
 
 > Note that, for simplicity an systemd service file is provided
-> [upstream](https://github.com/raoulh/mc-agent/blob/master/systemd/moolticute-ssh-agent.service "systemd unit file")
+> [upstream](https://github.com/raoulh/mc-agent/blob/master/systemd/mc-agent.service "systemd unit file")
 > that could be run and enabled for non-privileged users:
 > ```
 > $ systemctl --user start mc-agent.service
