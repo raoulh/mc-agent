@@ -36,7 +36,7 @@ be properly installed and running in order to use mc-agent.
 
 ## Installation
 mc-agent is distributed with the moolticute official installer. If you are not using
-those binaries, you can either get a copy of the binary of mc-agent from this [download page](https:/calaos.fr/mooltipass/tools).
+those binaries, you can either get a copy of the binary of mc-agent from this [download page](https://calaos.fr/mooltipass/tools).
 Installation from source can be done with go with something like:
 
 ```
