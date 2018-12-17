@@ -64,7 +64,8 @@ One common way of starting an ssh-agent is to put this in your .bashrc:
 if ! pgrep -u "$USER" mc-agent > /dev/null; then
     mc-agent > ~/.mc-agent-env
 fi
-if [[ "$SSH_AUTH_SOCK" == "" ]]; then
+if pgrep -u "$USER" mc-agent && grep -q 'SSH_AUTH_SOCK=' ~/.mc-agent-env; then
+    # once mc-agent started successfully override gnome-keyring ssh component
     eval "$(<~/.mc-agent-env)"
 fi
 ```
