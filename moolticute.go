@@ -12,8 +12,8 @@ import (
 	"net/url"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/satori/go.uuid"
 )
 
 const (
@@ -61,11 +61,7 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 	defer c.Close()
 
-	client_uuid, err := uuid.NewV4()
-	if err != nil {
-		log.Print("Cannot generate client UUID:", err)
-		return
-	}
+	client_uuid := uuid.New()
 
 	m := MoolticuteMsg{
 		Msg:      "get_data_node",
@@ -179,11 +175,7 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		return fmt.Errorf("Failed to encode with encoding/gob: %v", err)
 	}
 
-	client_uuid, err := uuid.NewV4()
-	if err != nil {
-		log.Print("Cannot generate client UUID:", err)
-		return
-	}
+	client_uuid := uuid.New()
 
 	m := MoolticuteMsg{
 		Msg:      "set_data_node",
