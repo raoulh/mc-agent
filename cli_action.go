@@ -12,11 +12,13 @@ import (
 	"io/ioutil"
 	"log"
 	"math/big"
+	"os"
 	"reflect"
 
 	"golang.org/x/crypto/ed25519"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 const (
@@ -355,7 +357,23 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 		}
 
 		key, err := ssh.ParseRawPrivateKey(fileData)
-		if err != nil {
+		if err != nil && err.Error() == "ssh: cannot decode encrypted private keys" {
+			// encrypted private key: ask for passphrase
+			fmt.Printf("Enter passphrase for %s:\n", f)
+			passphrase, err := terminal.ReadPassword(int(os.Stdin.Fd()))
+
+			if err != nil {
+				loadErrors.Collect(fmt.Errorf("[%s] could not read passphrase: %s", f, err))
+				continue
+			}
+
+			key, err = ssh.ParseRawPrivateKeyWithPassphrase(fileData, passphrase)
+			if err != nil {
+				loadErrors.Collect(fmt.Errorf("[%s] Failed to parse, %v", f, err))
+				continue
+			}
+
+		} else if err != nil {
 			loadErrors.Collect(fmt.Errorf("[%s] Failed to parse, %v", f, err))
 			continue
 		}
