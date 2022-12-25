@@ -22,8 +22,11 @@ You also need to export the corresponding env var to let other software use the 
 
 ## Launchctl
 
-Copy the [`com.themooltipass.moolticute-ssh-agent.plist`](com.themooltipass.moolticute-ssh-agent.plist) file to `~/Library/LaunchAgents/com.themooltipass.moolticute-ssh-agent.plist`
-Replace all three instances of `{{ user }}` with your username.
+Copy the [`com.themooltipass.moolticute-ssh-agent.plist`](com.themooltipass.moolticute-ssh-agent.plist) file to `~/Library/LaunchAgents/com.themooltipass.moolticute-ssh-agent.plist`, replacing instances of `{{ user }}` with your username.
+
+```console
+sed "s/{{ user }}/$USER/g" com.themooltipass.moolticute-ssh-agent.plist > ~/Library/LaunchAgents/com.themooltipass.moolticute-ssh-agent.plist
+```
 
 ### Load
 
@@ -32,6 +35,8 @@ Load the service to start on boot
 ```console
 launchctl load -w ~/Library/LaunchAgents/com.themooltipass.moolticute-ssh-agent.plist
 ```
+
+Start the service
 
 ```console
 launchctl start com.themooltipass.moolticute-ssh-agent
