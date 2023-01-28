@@ -1,3 +1,4 @@
+//go:build go1.7
 // +build go1.7
 
 package main
@@ -10,7 +11,11 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/jawher/mow.cli"
+	cli "github.com/jawher/mow.cli"
+)
+
+const (
+	MOOLTICUTE_DAEMON_URL = "ws://localhost:30035"
 )
 
 const (

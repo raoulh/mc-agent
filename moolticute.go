@@ -7,235 +7,75 @@ import (
 	"encoding/base64"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
-	"net/url"
 	"os"
 
-	"github.com/google/uuid"
-	"github.com/gorilla/websocket"
+	"git.sr.ht/~oliverpool/go-moolticute"
 )
-
-const (
-	MOOLTICUTE_DAEMON_URL = "ws://localhost:30035"
-)
-
-type MsgData struct {
-	Service         string `json:"service,omitempty"`
-	FallbackService string `json:"fallback_service,omitempty"`
-	NodeData        string `json:"node_data,omitempty"`
-	Failed          bool   `json:"failed,omitempty"`
-	ErrorMessage    string `json:"error_message,omitempty"`
-}
-
-type MoolticuteMsg struct {
-	Msg      string  `json:"msg"`
-	Data     MsgData `json:"data"`
-	ClientId string  `json:"client_id,omitempty"`
-}
-
-type MoolticuteMsgRaw struct {
-	Msg      string           `json:"msg"`
-	Data     *json.RawMessage `json:"data"`
-	ClientId string           `json:"client_id,omitempty"`
-}
 
 //We store an array of bytes to the device
 type McBinKeys [][]byte
 
-func McLoadKeys() (keys *McBinKeys, err error) {
-	keys = new(McBinKeys)
-
-	u, err := url.Parse(*mcUrl)
+func McLoadKeys() (*McBinKeys, error) {
+	resp, err := moolticute.MakeRequest(*mcUrl, "get_data_node", moolticute.Data{
+		Service: "Moolticute SSH Keys",
+	}, moolticute.HandleOtherMsg(printProgressForMoolticute))
 	if err != nil {
-		log.Println("Unable to parse moolticute URL", *mcUrl)
-		return
+		var errResponse moolticute.ResponseError
+		if errors.As(err, &errResponse) {
+			// everything went fine, but keys are not present
+			// or the user declined access
+			// create blank keys
+			return new(McBinKeys), nil
+		}
+		return nil, fmt.Errorf("could not get data: %w", err)
 	}
-	log.Printf("Moolticute: connecting to %s", u.String())
 
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	// decode Base64+gob encoded data from device
+	bdec, err := base64.StdEncoding.DecodeString(resp.NodeData)
 	if err != nil {
-		log.Print("Moolticute: dial:", err)
-		return
-	}
-	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	defer c.Close()
-
-	client_uuid := uuid.New()
-
-	m := MoolticuteMsg{
-		Msg:      "get_data_node",
-		ClientId: client_uuid.String(),
-		Data: MsgData{
-			Service: "Moolticute SSH Keys",
-		},
+		return nil, fmt.Errorf("could not base64 decode data: %w", err)
 	}
 
-	data, err := json.Marshal(m)
-	if err != nil {
-		return
-	}
-	if err = c.WriteMessage(websocket.TextMessage, data); err != nil {
-		log.Println("Moolticute: write:", err)
-		return
-	}
-
-	b64data := ""
-
-	for {
-		_, data, err = c.ReadMessage()
-		if err != nil {
-			log.Println("Moolticute: read:", err)
-			return
-		}
-
-		log.Println(string(data))
-
-		var recv MoolticuteMsgRaw
-		err = json.Unmarshal(data, &recv)
-		if err != nil {
-			log.Println("Moolticute: unmarshal error:", err)
-			return
-		}
-
-		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
-			fmt.Println(string(data))
-			os.Stdout.Sync()
-		}
-
-		if recv.Msg != "get_data_node" {
-			continue
-		}
-
-		var recvData MsgData
-		err = json.Unmarshal([]byte(*recv.Data), &recvData)
-		if err != nil {
-			log.Println("Moolticute: unmarshal error:", err)
-			return
-		}
-
-		// keys are not present, this is not an error
-		if recvData.Failed {
-			log.Println("Error getting node data from moolticute:", recvData.ErrorMessage)
-			return keys, nil
-		}
-
-		if m.ClientId == recv.ClientId {
-			b64data = recvData.NodeData
-			break
-		}
-
-		log.Println("Should not get here, something is wrong with moolticute answer")
-		return keys, fmt.Errorf("Something went wrong in Moolticute answer")
-	}
-
-	//try to decode binary data from device
-	//First Base64 decode
-	bdec, err := base64.StdEncoding.DecodeString(b64data)
-	if err != nil {
-		log.Println("Failed to base64 decode data:", err)
-		return
-	}
-
-	//To debug
-	//	kf, _ := os.Create("keys.bin")
-	//	kf.Write(bdec)
-	//	kf.Close()
-
+	keys := new(McBinKeys)
 	buffer := bytes.NewBuffer(bdec)
 	binDec := gob.NewDecoder(buffer)
 	err = binDec.Decode(keys)
 	if err != nil {
-		log.Println("Failed to decode encoding/gob:", err)
-		return
+		return nil, fmt.Errorf("could not decode encoding/gob: %w", err)
 	}
 
-	return
+	return keys, nil
 }
 
-func McSetKeys(keys *McBinKeys) (err error) {
-	u, err := url.Parse(*mcUrl)
-	if err != nil {
-		log.Println("Unable to parse moolticute URL", *mcUrl)
-		return
-	}
-	log.Printf("Moolticute: connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Print("Moolticute: dial:", err)
-		return
-	}
-	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
-	defer c.Close()
-
+func McSetKeys(keys *McBinKeys) error {
 	var buffer bytes.Buffer
-	binEnc := gob.NewEncoder(&buffer)
-	if err = binEnc.Encode(keys); err != nil {
-		return fmt.Errorf("Failed to encode with encoding/gob: %v", err)
+	if err := gob.NewEncoder(&buffer).Encode(keys); err != nil {
+		return fmt.Errorf("could not encode with encoding/gob: %v", err)
 	}
 
-	client_uuid := uuid.New()
-
-	m := MoolticuteMsg{
-		Msg:      "set_data_node",
-		ClientId: client_uuid.String(),
-		Data: MsgData{
-			Service:  "Moolticute SSH Keys",
-			NodeData: base64.StdEncoding.EncodeToString(buffer.Bytes()),
-		},
-	}
-
-	data, err := json.Marshal(m)
+	resp, err := moolticute.MakeRequest(*mcUrl, "set_data_node", moolticute.Data{
+		Service:  "Moolticute SSH Keys",
+		NodeData: base64.StdEncoding.EncodeToString(buffer.Bytes()),
+	}, moolticute.HandleOtherMsg(printProgressForMoolticute))
 	if err != nil {
-		return
+		return fmt.Errorf("could not set data: %#v %w", resp, err)
 	}
-	if err = c.WriteMessage(websocket.TextMessage, data); err != nil {
-		log.Println("Moolticute: write:", err)
-		return
+	return nil
+}
+
+// used by moolticute for loading keys into gui
+func printProgressForMoolticute(msg string, data json.RawMessage) error {
+	if (msg == "progress" || msg == "progress_detailed") && *outputProgress {
+		json.NewEncoder(os.Stdout).Encode(struct {
+			Msg  string          `json:"msg"`
+			Data json.RawMessage `json:"data"`
+		}{
+			Msg:  msg,
+			Data: data,
+		})
+		os.Stdout.Sync()
 	}
-
-	for {
-		_, data, err = c.ReadMessage()
-		if err != nil {
-			return fmt.Errorf("Moolticute: read: %v", err)
-		}
-
-		log.Println(string(data))
-
-		var recv MoolticuteMsgRaw
-		err = json.Unmarshal(data, &recv)
-		if err != nil {
-			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
-		}
-
-		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
-			fmt.Println(string(data))
-			os.Stdout.Sync()
-		}
-
-		if recv.Msg != "set_data_node" {
-			continue
-		}
-
-		var recvData MsgData
-		err = json.Unmarshal([]byte(*recv.Data), &recvData)
-		if err != nil {
-			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
-		}
-
-		// keys are not present, this is not an error
-		if recvData.Failed {
-			return fmt.Errorf("Error getting node data from moolticute: %v", err)
-		}
-
-		if m.ClientId == recv.ClientId {
-			break
-		}
-
-		log.Println("Should not get here, something is wrong with moolticute answer")
-		return fmt.Errorf("Something went wrong in Moolticute answer")
-	}
-
-	return
+	return nil
 }
