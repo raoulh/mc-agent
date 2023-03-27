@@ -1,16 +1,14 @@
-// +build go1.7
-
 package main
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
 	"runtime"
 	"time"
 
-	"github.com/jawher/mow.cli"
+	cli "github.com/jawher/mow.cli"
 )
 
 const (
@@ -26,13 +24,7 @@ var (
 	timeoutClearKeys Duration = Duration(time.Minute * 15)
 	mcUrl            *string
 	debugOpt         *bool
-	cliAction        *string
-	outputProgress   *bool //used by moolticute for loading keys into gui
-	listFingerprints *bool
-	keyNumber        *int
-	allKeys          *bool
-	keysFilename     *[]string
-	keyFilename      *string
+	outputProgress   *bool // used by moolticute for loading keys into gui
 )
 
 // Declare Duration type for CLI
@@ -65,8 +57,16 @@ func main() {
 
 	app.Spec = "[-d][-m][--debug][-p]"
 
-	app.VarOpt("d duration", &timeoutClearKeys, "How long you want the agent to keep keys into memory (default to 15min)")
-	mcUrl = app.StringOpt("m moolticute_url", MOOLTICUTE_DAEMON_URL, "Use a different url for connecting to moolticute")
+	app.VarOpt(
+		"d duration",
+		&timeoutClearKeys,
+		"How long you want the agent to keep keys into memory (default to 15min)",
+	)
+	mcUrl = app.StringOpt(
+		"m moolticute_url",
+		MOOLTICUTE_DAEMON_URL,
+		"Use a different url for connecting to moolticute",
+	)
 	debugOpt = app.BoolOpt("debug", false, "Add debug log to stdout")
 	outputProgress = app.BoolOpt("p output_progress", false, "Used by moolticute GUI")
 
@@ -74,8 +74,16 @@ func main() {
 
 	app.Command("public", "List public key parameters of all identities", func(cmd *cli.Cmd) {
 		var (
-			listFingerprints = cmd.BoolOpt("l", false, "List fingerprints of all identities instead of public keys")
-			keyNumber        = cmd.IntArg("KEYNUM", -1, "Select which key to output, default displays all keys")
+			listFingerprints = cmd.BoolOpt(
+				"l",
+				false,
+				"List fingerprints of all identities instead of public keys",
+			)
+			keyNumber = cmd.IntArg(
+				"KEYNUM",
+				-1,
+				"Select which key to output, default displays all keys",
+			)
 		)
 
 		cmd.Spec = "[KEYNUM] [OPTIONS]"
@@ -91,9 +99,7 @@ func main() {
 	})
 
 	app.Command("private", "Print the private key in PEM format", func(cmd *cli.Cmd) {
-		var (
-			keyNumber = cmd.IntArg("KEYNUM", 0, "Select which key to output")
-		)
+		keyNumber := cmd.IntArg("KEYNUM", 0, "Select which key to output")
 
 		cmd.Spec = "[KEYNUM]"
 
@@ -121,12 +127,10 @@ func main() {
 	})
 
 	app.Command("add", "Add one or more keys into the keychain", func(cmd *cli.Cmd) {
-		var (
-			keysFilename = cmd.Strings(cli.StringsArg{
-				Name: "KEY",
-				Desc: "Private keys to import into the device",
-			})
-		)
+		keysFilename := cmd.Strings(cli.StringsArg{
+			Name: "KEY",
+			Desc: "Private keys to import into the device",
+		})
 
 		cmd.Spec = "KEY..."
 
@@ -138,8 +142,12 @@ func main() {
 
 	app.Command("cli", "CLI API to play with keys from within the moolticute GUI", func(cmd *cli.Cmd) {
 		var (
-			keyNumber   = cmd.IntOpt("num", 0, "Select which key to use")
-			cliAction   = cmd.StringOpt("c cli_action", "", "CLI API to play with keys from within the moolticute GUI")
+			keyNumber = cmd.IntOpt("num", 0, "Select which key to use")
+			cliAction = cmd.StringOpt(
+				"c cli_action",
+				"",
+				"CLI API to play with keys from within the moolticute GUI",
+			)
 			keyFilename = cmd.StringOpt("key", "", "Private key to import into the device")
 		)
 
@@ -151,7 +159,7 @@ func main() {
 		}
 	})
 
-	//Main action of the tool is to start the Agent
+	// Main action of the tool is to start the Agent
 	app.Action = func() {
 		setupLogger()
 		RunAgent()
@@ -164,8 +172,8 @@ func main() {
 
 func setupLogger() {
 	if !*debugOpt {
-		//completely disable debug output
+		// completely disable debug output
 		log.SetFlags(0)
-		log.SetOutput(ioutil.Discard)
+		log.SetOutput(io.Discard)
 	}
 }

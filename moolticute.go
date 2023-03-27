@@ -1,6 +1,6 @@
 package main
 
-//Moolticute websocket connection
+// Moolticute websocket connection
 
 import (
 	"bytes"
@@ -40,7 +40,7 @@ type MoolticuteMsgRaw struct {
 	ClientId string           `json:"client_id,omitempty"`
 }
 
-//We store an array of bytes to the device
+// We store an array of bytes to the device
 type McBinKeys [][]byte
 
 func McLoadKeys() (keys *McBinKeys, err error) {
@@ -58,7 +58,10 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 		log.Print("Moolticute: dial:", err)
 		return
 	}
-	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	defer c.WriteMessage(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+	)
 	defer c.Close()
 
 	client_uuid := uuid.New()
@@ -98,7 +101,7 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 			return
 		}
 
-		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
+		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress {
 			fmt.Println(string(data))
 			os.Stdout.Sync()
 		}
@@ -126,18 +129,18 @@ func McLoadKeys() (keys *McBinKeys, err error) {
 		}
 
 		log.Println("Should not get here, something is wrong with moolticute answer")
-		return keys, fmt.Errorf("Something went wrong in Moolticute answer")
+		return keys, fmt.Errorf("something went wrong in Moolticute answer")
 	}
 
-	//try to decode binary data from device
-	//First Base64 decode
+	// try to decode binary data from device
+	// First Base64 decode
 	bdec, err := base64.StdEncoding.DecodeString(b64data)
 	if err != nil {
 		log.Println("Failed to base64 decode data:", err)
 		return
 	}
 
-	//To debug
+	// To debug
 	//	kf, _ := os.Create("keys.bin")
 	//	kf.Write(bdec)
 	//	kf.Close()
@@ -166,13 +169,16 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		log.Print("Moolticute: dial:", err)
 		return
 	}
-	defer c.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	defer c.WriteMessage(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+	)
 	defer c.Close()
 
 	var buffer bytes.Buffer
 	binEnc := gob.NewEncoder(&buffer)
 	if err = binEnc.Encode(keys); err != nil {
-		return fmt.Errorf("Failed to encode with encoding/gob: %v", err)
+		return fmt.Errorf("failed to encode with encoding/gob: %v", err)
 	}
 
 	client_uuid := uuid.New()
@@ -198,7 +204,7 @@ func McSetKeys(keys *McBinKeys) (err error) {
 	for {
 		_, data, err = c.ReadMessage()
 		if err != nil {
-			return fmt.Errorf("Moolticute: read: %v", err)
+			return fmt.Errorf("moolticute: read: %v", err)
 		}
 
 		log.Println(string(data))
@@ -206,10 +212,10 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		var recv MoolticuteMsgRaw
 		err = json.Unmarshal(data, &recv)
 		if err != nil {
-			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
+			return fmt.Errorf("moolticute: unmarshal error: %v", err)
 		}
 
-		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress == true {
+		if (recv.Msg == "progress" || recv.Msg == "progress_detailed") && *outputProgress {
 			fmt.Println(string(data))
 			os.Stdout.Sync()
 		}
@@ -221,7 +227,7 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		var recvData MsgData
 		err = json.Unmarshal([]byte(*recv.Data), &recvData)
 		if err != nil {
-			return fmt.Errorf("Moolticute: unmarshal error: %v", err)
+			return fmt.Errorf("moolticute: unmarshal error: %v", err)
 		}
 
 		// keys are not present, this is not an error
@@ -234,7 +240,7 @@ func McSetKeys(keys *McBinKeys) (err error) {
 		}
 
 		log.Println("Should not get here, something is wrong with moolticute answer")
-		return fmt.Errorf("Something went wrong in Moolticute answer")
+		return fmt.Errorf("something went wrong in Moolticute answer")
 	}
 
 	return

@@ -1,8 +1,8 @@
 package main
 
-//SSH agent
-//Most code comes from golang: golang.org/x/crypto/ssh/agent
-//Modified to fit moolticute usage
+// SSH agent
+// Most code comes from golang: golang.org/x/crypto/ssh/agent
+// Modified to fit moolticute usage
 
 import (
 	"encoding/binary"
@@ -26,17 +26,6 @@ const (
 	agentRemoveAllIdentities = 19
 	agentAddIDConstrained    = 25
 
-	// 3.3 Key-type independent requests from client to agent
-	agentAddSmartcardKey            = 20
-	agentRemoveSmartcardKey         = 21
-	agentLock                       = 22
-	agentUnlock                     = 23
-	agentAddSmartcardKeyConstrained = 26
-
-	// 3.7 Key constraint identifiers
-	agentConstrainLifetime = 1
-	agentConstrainConfirm  = 2
-
 	// maxAgentResponseBytes is the maximum agent reply size that is accepted. This
 	// is a sanity check, not a limit in the spec.
 	maxAgentResponseBytes = 16 << 20
@@ -52,11 +41,6 @@ const (
 
 // See [PROTOCOL.agent], section 2.5.2.
 const agentRequestIdentities = 11
-
-type requestIdentitiesAgentMsg struct{}
-
-// See [PROTOCOL.agent], section 2.5.2.
-const agentIdentitiesAnswer = 12
 
 type identitiesAnswerAgentMsg struct {
 	NumKeys uint32 `sshtype:"12"`
@@ -74,16 +58,8 @@ type signRequestAgentMsg struct {
 
 // See [PROTOCOL.agent], section 2.6.2.
 
-// 3.6 Replies from agent to client for protocol 2 key operations
-const agentSignResponse = 14
-
 type signResponseAgentMsg struct {
 	SigBlob []byte `sshtype:"14"`
-}
-
-type publicKey struct {
-	Format string
-	Rest   []byte `ssh:"rest"`
 }
 
 type wireKey struct {
@@ -94,9 +70,6 @@ type wireKey struct {
 type agentRemoveIdentityMsg struct {
 	KeyBlob []byte `sshtype:"18"`
 }
-
-// See [PROTOCOL.agent], section 2.5.1.
-const agentV1IdentitiesAnswer = 2
 
 type agentV1IdentityMsg struct {
 	Numkeys uint32 `sshtype:"2"`
@@ -123,8 +96,8 @@ type SshCertificate struct {
 	SignatureKey ssh.PublicKey
 }
 
-//struct for maintaining moolticute keys, it contains minimal data
-//required for setting up the keys in the keychain
+// struct for maintaining moolticute keys, it contains minimal data
+// required for setting up the keys in the keychain
 type McKey struct {
 	PrivateKey interface{}
 	// Comment is an optional, free-form string.
@@ -133,16 +106,16 @@ type McKey struct {
 
 type SshAgent struct {
 	keyring    agent.Agent
-	keysLoaded bool //true if agent has already loaded keys from device
+	keysLoaded bool // true if agent has already loaded keys from device
 
-	//this is the raw list of keys loaded from MC, it is the
-	//source for all keys sent to the keyring.
+	// this is the raw list of keys loaded from MC, it is the
+	// source for all keys sent to the keyring.
 	Keys []McKey
 
-	//mutex to prevent access from multiple place
+	// mutex to prevent access from multiple place
 	lock sync.Mutex
 
-	//timer to clear keys
+	// timer to clear keys
 	timerClear *time.Timer
 }
 
@@ -252,10 +225,10 @@ func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 
 		keyToDel := agent.Key{Format: wk.Format, Blob: req.KeyBlob}
 
-		//find the key
+		// find the key
 		for i, k := range l {
 			if fingerprintSHA256(k) == fingerprintSHA256(&keyToDel) {
-				//found the key, delete it
+				// found the key, delete it
 				copy(a.Keys[i:], a.Keys[i+1:])
 				a.Keys = a.Keys[:len(a.Keys)-1]
 				break
@@ -306,12 +279,11 @@ func (a *SshAgent) processRequest(data []byte) (interface{}, error) {
 		return responseStub, nil
 	}
 
-	return nil, fmt.Errorf("Not implemented opcode %d", data[0])
+	return nil, fmt.Errorf("unimplemented opcode %d", data[0])
 }
 
-//process a SSH agent request
+// process a SSH agent request
 func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
-
 	var length [4]byte
 
 	if _, err := io.ReadFull(c, length[:]); err != nil {
@@ -334,15 +306,15 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
-	//load keys from moolticute if not done, or after timeout
+	// load keys from moolticute if not done, or after timeout
 	if !a.keysLoaded {
 		log.Println("Ask MC keys")
 		k, err := McLoadKeys()
 		if err == nil {
 			if err = a.addKeysToKeychain(k); err != nil {
-				return fmt.Errorf("Failed to load keys from Moolticute: %v", err)
+				return fmt.Errorf("failed to load keys from Moolticute: %v", err)
 			} else {
-				if len(*k) > 0 { //only set keys loaded if keys are present
+				if len(*k) > 0 { // only set keys loaded if keys are present
 					a.keysLoaded = true
 				}
 				log.Println(len(*k), "keys loaded from MP")
@@ -350,10 +322,10 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 		}
 	}
 
-	//start timer to clear keys
+	// start timer to clear keys
 	if a.timerClear != nil {
 		if !a.timerClear.Stop() {
-			<-a.timerClear.C //drain value from the channel
+			<-a.timerClear.C // drain value from the channel
 		}
 		a.timerClear.Reset(time.Duration(timeoutClearKeys))
 	} else {
@@ -390,19 +362,19 @@ func (a *SshAgent) ProcessRequest(c io.ReadWriter) error {
 	return nil
 }
 
-//add all keys from MC to keychain
+// add all keys from MC to keychain
 func (a *SshAgent) addKeysToKeychain(keys *McBinKeys) error {
-	//Populate the keyring with all keys loaded from MP
+	// Populate the keyring with all keys loaded from MP
 	for i := 0; i < len(*keys); i++ {
 		if err := a.addKeyFromMoolticute([][]byte(*keys)[i]); err != nil {
-			return fmt.Errorf("Failed to load key %d: %v", i, err)
+			return fmt.Errorf("failed to load key %d: %v", i, err)
 		}
 	}
 
 	return nil
 }
 
-//add a key to the keychain
+// add a key to the keychain
 func (a *SshAgent) addKeyFromMoolticute(req []byte) error {
 	addedKey, err := parseKeyBlob(req)
 	if err != nil {
@@ -418,14 +390,14 @@ func (a *SshAgent) addKeyFromMoolticute(req []byte) error {
 	return a.keyring.Add(*addedKey)
 }
 
-//insert an identity into keychain
+// insert an identity into keychain
 func (a *SshAgent) insertIdentity(req []byte) error {
 	addedKey, err := parseKeyBlob(req)
 	if err != nil {
 		return err
 	}
 
-	//Get public key
+	// Get public key
 	pubKey, err := getPubKey(addedKey)
 	if err != nil {
 		return err
@@ -436,7 +408,7 @@ func (a *SshAgent) insertIdentity(req []byte) error {
 		return err
 	}
 
-	//check if the key was not already added by comparing pub keys
+	// check if the key was not already added by comparing pub keys
 	for _, k := range l {
 		if fingerprintSHA256(pubKey) == fingerprintSHA256(k) {
 			log.Println("Key already in keychain")
@@ -447,7 +419,7 @@ func (a *SshAgent) insertIdentity(req []byte) error {
 	mck := AddedKeyToMcKey(addedKey)
 	a.Keys = append(a.Keys, mck)
 
-	//Send keys to moolticute
+	// Send keys to moolticute
 	if err := McSetKeys(a.ToMcKeys()); err != nil {
 		return err
 	}
@@ -464,12 +436,12 @@ func (a *SshAgent) ToMcKeys() *McBinKeys {
 }
 
 func (a SshAgent) removeAllKeys(delFromDevice bool) error {
-	a.Keys = nil //clear keys
+	a.Keys = nil // clear keys
 
 	if delFromDevice {
-		//Send keys to moolticute
+		// Send keys to moolticute
 		if err := McSetKeys(a.ToMcKeys()); err != nil {
-			return fmt.Errorf("Failed to remove keys from moolticute: %v", err)
+			return fmt.Errorf("failed to remove keys from moolticute: %v", err)
 		}
 	}
 

@@ -8,9 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
+	"os"
 	"strings"
 
 	"golang.org/x/crypto/ed25519"
@@ -209,12 +209,10 @@ func readOpensshComment(data []byte) string {
 	default:
 		return ""
 	}
-
-	return ""
 }
 
 func readPubComment(fname string) string {
-	fileData, err := ioutil.ReadFile(fname)
+	fileData, err := os.ReadFile(fname)
 	if err != nil {
 		return ""
 	}
