@@ -1,13 +1,12 @@
+//go:build !windows
 // +build !windows
 
-//Agent platform code for Linux and macOS
-//Listens to a unix socket
-
+// Agent platform code for Linux and macOS
+// Listens to a unix socket
 package main
 
 import (
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"os"
@@ -15,7 +14,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/jawher/mow.cli"
+	cli "github.com/jawher/mow.cli"
 )
 
 var (
@@ -34,10 +33,11 @@ func SetupPlatformOpts(app *cli.Cli) {
 }
 
 func RunAgent() {
-	//parse/create socket path
+	// parse/create socket path
 	if *sockPath == "" {
-		//create socket path
-		sockDir, err := ioutil.TempDir("/tmp", "moolticute-ssh-agent")
+		// create socket path
+		os.TempDir()
+		sockDir, err := os.MkdirTemp("", "moolticute-ssh-agent")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -48,7 +48,9 @@ func RunAgent() {
 	if !*noFork {
 		args := append(os.Args[1:], "--no-fork", "--address="+*sockPath)
 		cmd := exec.Command(os.Args[0], args...)
-		cmd.Start()
+		if err := cmd.Start(); err != nil {
+			log.Fatal(err)
+		}
 		echoSocket(*sockPath)
 		return
 	}
@@ -62,9 +64,9 @@ func RunAgent() {
 		log.Fatal("listen error:", err)
 	}
 
-	//cleanly shutdown in case a signal has been received
+	// cleanly shutdown in case a signal has been received
 	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, os.Interrupt, os.Kill, syscall.SIGTERM)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGTERM)
 	go func(c chan os.Signal) {
 		sig := <-c
 		fmt.Printf("Caught signal %s: shutting down.\n", sig)

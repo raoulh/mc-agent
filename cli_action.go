@@ -8,10 +8,11 @@ import (
 	"encoding/asn1"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"math/big"
+	"os"
 	"reflect"
 
 	"golang.org/x/crypto/ed25519"
@@ -20,7 +21,7 @@ import (
 )
 
 const (
-	//https://github.com/openssh/openssh-portable/blob/315d2a4e674d0b7115574645cb51f968420ebb34/cipher.c#L98
+	// https://github.com/openssh/openssh-portable/blob/315d2a4e674d0b7115574645cb51f968420ebb34/cipher.c#L98
 	CipherNoneBlockSize = 8
 )
 
@@ -45,12 +46,8 @@ func (c *ErrorCollector) Collect(e error) {
 	*c = append(*c, e)
 }
 
-func (c *ErrorCollector) Error() (err string) {
-	for _, e := range *c {
-		err += fmt.Sprintf("%s\n", e.Error())
-	}
-
-	return err
+func (c ErrorCollector) Error() (err string) {
+	return errors.Join(c...).Error()
 }
 
 func doCliAction(action string, keyNum int, filename []string) {
@@ -117,7 +114,7 @@ func doList() (jarray []JsonKey, err error) {
 		if err = a.addKeysToKeychain(k); err != nil {
 			return jarray, fmt.Errorf("Failed to load keys from Moolticute: %v", err)
 		} else {
-			if len(*k) > 0 { //only set keys loaded if keys are present
+			if len(*k) > 0 { // only set keys loaded if keys are present
 				a.keysLoaded = true
 			}
 			log.Println(len(*k), "keys loaded from MP")
@@ -178,7 +175,7 @@ func pemBlockForKey(priv interface{}, agentPubKey *agent.Key) *pem.Block {
 
 		pub := k.Public().(ed25519.PublicKey)
 
-		//ED25519 key
+		// ED25519 key
 		edkey := struct {
 			Check1  uint32
 			Check2  uint32
@@ -188,7 +185,7 @@ func pemBlockForKey(priv interface{}, agentPubKey *agent.Key) *pem.Block {
 			Comment string
 			Pad     []byte `ssh:"rest"`
 		}{
-			Check1:  324328077, //random int should match
+			Check1:  324328077, // random int should match
 			Check2:  324328077,
 			Keytype: ssh.KeyAlgoED25519,
 			Pub:     pub,
@@ -196,14 +193,14 @@ func pemBlockForKey(priv interface{}, agentPubKey *agent.Key) *pem.Block {
 			Comment: agentPubKey.Comment,
 		}
 
-		//padding
+		// padding
 		i := 1
 		for (len(ssh.Marshal(edkey)) % CipherNoneBlockSize) != 0 {
 			edkey.Pad = append(edkey.Pad, byte(i&0xff))
 			i++
 		}
 
-		//openssh container
+		// openssh container
 		w := struct {
 			CipherName   string
 			KdfName      string
@@ -241,7 +238,6 @@ const (
 
 func listKeysCommand(action ListKeyAction, keyNum int) {
 	jarray, err := doList()
-
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
@@ -298,15 +294,15 @@ func delKeys(keyNum int) (a *SshAgent, err error) {
 
 	if keyNum < 0 {
 		if err := a.removeAllKeys(true); err != nil {
-			return a, fmt.Errorf("Failed to remove all keys: %v", err)
+			return a, fmt.Errorf("failed to remove all keys: %v", err)
 		}
 	} else {
 		k, err := McLoadKeys()
 		if err == nil {
 			if err = a.addKeysToKeychain(k); err != nil {
-				return a, fmt.Errorf("Failed to load keys from Moolticute: %v\n", err)
+				return a, fmt.Errorf("failed to load keys from Moolticute: %v", err)
 			} else {
-				if len(*k) > 0 { //only set keys loaded if keys are present
+				if len(*k) > 0 { // only set keys loaded if keys are present
 					a.keysLoaded = true
 				}
 				log.Println(len(*k), "keys loaded from MP")
@@ -314,16 +310,16 @@ func delKeys(keyNum int) (a *SshAgent, err error) {
 		}
 
 		if keyNum >= len(*k) {
-			return a, fmt.Errorf("Error: %d is out of range. Only %d keys available.", keyNum, len(*k))
+			return a, fmt.Errorf("error: %d is out of range. Only %d keys available", keyNum, len(*k))
 		}
 
-		//found the key, delete it
+		// found the key, delete it
 		copy(a.Keys[keyNum:], a.Keys[keyNum+1:])
 		a.Keys = a.Keys[:len(a.Keys)-1]
 
-		//Send keys to moolticute
+		// Send keys to moolticute
 		if err := McSetKeys(a.ToMcKeys()); err != nil {
-			return a, fmt.Errorf("Failed to remove key from moolticute: %v", err)
+			return a, fmt.Errorf("failed to remove key from moolticute: %v", err)
 		}
 	}
 
@@ -348,7 +344,7 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 	var newKeys []AddKey
 
 	for _, f := range filename {
-		fileData, err := ioutil.ReadFile(f)
+		fileData, err := os.ReadFile(f)
 		if err != nil {
 			loadErrors.Collect(fmt.Errorf("[%s] Failed to read file, %v", f, err))
 			continue
@@ -360,7 +356,7 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 			continue
 		}
 
-		//Reparse the file and try to read the comment. The Golang api does
+		// Reparse the file and try to read the comment. The Golang api does
 		// not export the comment field
 		var comment string
 
@@ -372,12 +368,12 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 
 		switch block.Type {
 		case "OPENSSH PRIVATE KEY":
-			//In openssh format the comment is included inside the data block
+			// In openssh format the comment is included inside the data block
 			comment = readOpensshComment(block.Bytes)
 		}
 
 		if comment == "" {
-			//try reading the comment from the .pub file
+			// try reading the comment from the .pub file
 			comment = readPubComment(f + ".pub")
 		}
 
@@ -386,18 +382,24 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 			Comment:    comment,
 		}
 
-		//Get public key
+		// Get public key
 		pubKey, err := getPubKey(addedKey)
 		if err != nil {
-			loadErrors.Collect(fmt.Errorf("Failed to get public key, %v", err))
+			loadErrors.Collect(fmt.Errorf("failed to get public key, %v", err))
 			continue
 		}
 
-		//Check duplicated keys
+		// Check duplicated keys
 		isDup := false
 		for _, k := range newKeys {
 			if fingerprintSHA256(pubKey) == fingerprintSHA256(k.PubKey) {
-				loadErrors.Collect(fmt.Errorf("[%s] Key with fingerprint %v is a duplicate. Not adding this one", f, fingerprintSHA256(k.PubKey)))
+				loadErrors.Collect(
+					fmt.Errorf(
+						"[%s] Key with fingerprint %v is a duplicate. Not adding this one",
+						f,
+						fingerprintSHA256(k.PubKey),
+					),
+				)
 				isDup = true
 			}
 		}
@@ -412,20 +414,20 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 	}
 
 	if len(newKeys) == 0 {
-		loadErrors.Collect(fmt.Errorf("No keys to add"))
+		loadErrors.Collect(fmt.Errorf("no keys to add"))
 		return
 	}
 
 	a = NewSshAgent()
 
-	//Load keys from MC
+	// Load keys from MC
 	k, err := McLoadKeys()
 	if err == nil {
 		if err = a.addKeysToKeychain(k); err != nil {
-			loadErrors.Collect(fmt.Errorf("Failed to load keys from Moolticute: %v\n", err))
+			loadErrors.Collect(fmt.Errorf("failed to load keys from Moolticute: %n", err))
 			return
 		} else {
-			if len(*k) > 0 { //only set keys loaded if keys are present
+			if len(*k) > 0 { // only set keys loaded if keys are present
 				a.keysLoaded = true
 			}
 			log.Println(len(*k), "keys loaded from MP")
@@ -434,18 +436,24 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 
 	l, err := a.keyring.List()
 	if err != nil {
-		loadErrors.Collect(fmt.Errorf("Failed to list keychain, %v", err))
+		loadErrors.Collect(fmt.Errorf("failed to list keychain, %v", err))
 		return
 	}
 
-	//check if the key was not already added by comparing pub keys
+	// check if the key was not already added by comparing pub keys
 	aKeyWasAdded := false
 	for _, ak := range newKeys {
 		isAlreadyAdded := false
 		for _, k := range l {
 			log.Println("Comparing fingerprint", fingerprintSHA256(ak.PubKey), "==", fingerprintSHA256(k))
 			if fingerprintSHA256(ak.PubKey) == fingerprintSHA256(k) {
-				loadErrors.Collect(fmt.Errorf("[%s] This key with fingerprint %v is already in the keychain. Skipping.", ak.Filename, fingerprintSHA256(k)))
+				loadErrors.Collect(
+					fmt.Errorf(
+						"[%s] This key with fingerprint %v is already in the keychain; skipping",
+						ak.Filename,
+						fingerprintSHA256(k),
+					),
+				)
 				isAlreadyAdded = true
 			}
 		}
@@ -458,13 +466,13 @@ func addKeys(filename []string) (a *SshAgent, loadErrors ErrorCollector) {
 	}
 
 	if !aKeyWasAdded {
-		loadErrors.Collect(fmt.Errorf("Nothing to add. Aborting."))
+		loadErrors.Collect(fmt.Errorf("nothing to add; aborting"))
 		return
 	}
 
-	//Send keys to moolticute
+	// Send keys to moolticute
 	if err := McSetKeys(a.ToMcKeys()); err != nil {
-		loadErrors.Collect(fmt.Errorf("Failed to send keys to device, %v", err))
+		loadErrors.Collect(fmt.Errorf("failed to send keys to device, %v", err))
 	}
 
 	return a, loadErrors

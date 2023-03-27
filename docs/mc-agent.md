@@ -1,5 +1,7 @@
 # mc-agent
+
 ## Introduction
+
 mc-agent is built by [Mooltipass](https://www.themooltipass.com/
 "Mooltipass website") community in order to provide a tool that
 comply to the
@@ -20,6 +22,7 @@ On the Windows platform, mc-agent fully replaces the Putty SSH agent. Thus all P
 can be used transparently with mc-agent.
 
 ### ssh-agent
+
 ssh-agent is used to store the unencrypted format of key used for authenticating
 against SSH server. That is, one is able to permanently store its key in a "secure
 way" (encrypted on disk, security tokens, Mooltipass), with only need to provided
@@ -35,11 +38,12 @@ rely on [Moolticute](https://github.com/mooltipass/moolticute
 be properly installed and running in order to use mc-agent.
 
 ## Installation
+
 mc-agent is distributed with the moolticute official installer. If you are not using
 those binaries, you can either get a copy of the binary of mc-agent from this [download page](https://calaos.fr/mooltipass/tools).
 Installation from source can be done with go with something like:
 
-```
+```console
 $ go get github.com/raoulh/mc-agent
 ```
 
@@ -52,7 +56,7 @@ It can be started the same way and it will export the standard SSH_AUTH_SOCK env
 
 To start it normally by using a random socket path:
 
-```
+```console
 $ mc-agent
 SSH_AUTH_SOCK=/tmp/moolticute-ssh-agent404882600/agent.sock; export SSH_AUTH_SOCK;
 ```
@@ -60,7 +64,8 @@ SSH_AUTH_SOCK=/tmp/moolticute-ssh-agent404882600/agent.sock; export SSH_AUTH_SOC
 The agent will fork in the background.
 
 One common way of starting an ssh-agent is to put this in your .bashrc:
-```
+
+```bash
 if ! pgrep -u "$USER" mc-agent > /dev/null; then
     mc-agent > ~/.mc-agent-env
 fi
@@ -79,15 +84,20 @@ To manage keys in your mooltipass device, multiple ways can be used. One can use
 command.
 
 Add a key:
-```
+
+```console
 $ ssh-add my-key-file.key
 ```
+
 Delete all keys:
-```
+
+```console
 $ ssh-add -D
 ```
+
 List keys:
-```
+
+```console
 $ ssh-add -l
 ```
 
